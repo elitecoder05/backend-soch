@@ -164,11 +164,17 @@ router.get('/my-models', authenticateToken, async (req, res) => {
 // GET /api/models - Get all approved models (Public)
 router.get('/', async (req, res) => {
   try {
-    const { category, pricing, page = 1, limit = 20, search } = req.query;
+    const { category, pricing, page = 1, limit = 20, search, includePending } = req.query;
     const skip = (page - 1) * limit;
 
     // Build filter object
-    const filter = { status: 'approved' };
+    const filter = {};
+    // If includePending is true, show both approved and pending models, otherwise only approved
+    if (includePending === 'true') {
+      filter.status = { $in: ['approved', 'pending'] };
+    } else {
+      filter.status = 'approved';
+    }
     
     if (category && category !== 'all') {
       filter.category = category;
