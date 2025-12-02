@@ -66,7 +66,17 @@ const modelSchema = Joi.object({
     Joi.string().trim().max(200).messages({
       'string.max': 'Each example prompt cannot be more than 200 characters'
     })
-  ).default([])
+  ).default([]),
+  iconUrl: Joi.string().uri().allow('').messages({
+    'string.uri': 'Please enter a valid icon URL'
+  }),
+  screenshots: Joi.array().items(
+    Joi.string().uri().messages({
+      'string.uri': 'Please enter valid screenshot URLs'
+    })
+  ).max(4).default([]).messages({
+    'array.max': 'Maximum 4 screenshots allowed'
+  })
 });
 
 // POST /api/models - Upload a new AI model (Protected)
