@@ -29,6 +29,7 @@ const checkDatabaseConnection = (req, res, next) => {
 const authRoutes = require('./routes/auth');
 const modelRoutes = require('./routes/models');
 const testRoutes = require('./routes/test');
+const paymentsRoutes = require('./routes/payments');
 
 // MongoDB Connection
 const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/sochai-backend';
@@ -56,6 +57,9 @@ app.use('/api/models', checkDatabaseConnection, modelRoutes);
 
 // Test routes (for development only)
 app.use('/api/test', checkDatabaseConnection, testRoutes);
+
+// Payments (Razorpay) routes
+app.use('/api/payments', checkDatabaseConnection, paymentsRoutes);
 
 // Simple POST API that returns "Hello World"
 app.post('/api/hello', (req, res) => {
