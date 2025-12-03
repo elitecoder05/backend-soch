@@ -50,3 +50,7 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
+# Firebase service account files (sensitive)
+*-firebase-adminsdk-*.json
+sochai-*-firebase-adminsdk-*.json
