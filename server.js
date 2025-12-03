@@ -28,6 +28,7 @@ const checkDatabaseConnection = (req, res, next) => {
 // Import routes
 const authRoutes = require('./routes/auth');
 const modelRoutes = require('./routes/models');
+const categoriesRoutes = require('./routes/categories');
 const testRoutes = require('./routes/test');
 const paymentsRoutes = require('./routes/payments');
 
@@ -54,6 +55,9 @@ app.use('/api/auth', checkDatabaseConnection, authRoutes);
 
 // Model routes (protected with database connection check)
 app.use('/api/models', checkDatabaseConnection, modelRoutes);
+
+// Categories (public endpoint - but depends on database for counts)
+app.use('/api/categories', checkDatabaseConnection, categoriesRoutes);
 
 // Test routes (for development only)
 app.use('/api/test', checkDatabaseConnection, testRoutes);
@@ -95,6 +99,7 @@ const startServer = async () => {
       console.log(`- POST /api/auth/login`);
       console.log(`- POST /api/models (protected)`);
       console.log(`- GET  /api/models`);
+      console.log(`- GET  /api/categories`);
       console.log(`- GET  /api/models/my-models (protected)`);
       console.log(`- GET  /api/models/:id`);
       console.log(`- PUT  /api/models/:id (protected)`);
