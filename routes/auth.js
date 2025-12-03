@@ -376,10 +376,6 @@ router.put('/admin/toggle-subscription/:userId', async (req, res) => {
 // POST /api/auth/google-signin
 router.post('/google-signin', async (req, res) => {
   try {
-    // Add CORS headers explicitly for this route
-    res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
-    res.header('Access-Control-Allow-Credentials', 'true');
-    
     console.log('Google signin request received from origin:', req.headers.origin);
     console.log('Request headers:', req.headers);
     

@@ -19,46 +19,40 @@ const allowedOrigins = [
   'http://localhost:2000'
 ];
 
-
-
-// CORS middleware - must be the very first middleware
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  console.log(`[${new Date().toISOString()}] CORS: ${req.method} ${req.path} from origin: ${origin}`);
-  
-  // Check if origin is allowed
-  const isOriginAllowed = !origin || allowedOrigins.includes(origin);
-  const allowedOrigin = isOriginAllowed ? (origin || 'https://www.sochai.store') : 'https://www.sochai.store';
-  
-  console.log(`[${new Date().toISOString()}] CORS: Origin allowed: ${isOriginAllowed}, setting allowed origin: ${allowedOrigin}`);
-  
-  // Always set CORS headers - be very explicit
-  res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
-  res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, PUT, PATCH, POST, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin, Access-Control-Request-Method, Access-Control-Request-Headers');
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Max-Age', '86400');
-  
-  // Handle preflight requests immediately and explicitly
-  if (req.method === 'OPTIONS') {
-    console.log(`[${new Date().toISOString()}] CORS: Preflight request for ${req.path} - responding with 200`);
-    res.status(200).send('OK');
-    return;
-  }
-  
-  next();
-});
-
-// Also apply express CORS as backup
+// CORS configuration using express cors middleware
 app.use(cors({
   origin: function (origin, callback) {
-    console.log('Express CORS: Processing origin:', origin);
-    // Allow all origins for debugging
+    console.log(`[${new Date().toISOString()}] CORS: Processing origin: ${origin}`);
+    
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) {
+      console.log(`[${new Date().toISOString()}] CORS: No origin, allowing request`);
+      return callback(null, true);
+    }
+    
+    // Check if origin is in allowed list
+    if (allowedOrigins.includes(origin)) {
+      console.log(`[${new Date().toISOString()}] CORS: Origin ${origin} is allowed`);
+      return callback(null, true);
+    }
+    
+    // For production, log but still allow (can change this to be more restrictive)
+    console.log(`[${new Date().toISOString()}] CORS: Origin ${origin} not in allowed list, but allowing anyway`);
     callback(null, true);
   },
   credentials: true,
   methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'X-Requested-With', 
+    'Accept', 
+    'Origin',
+    'Access-Control-Request-Method',
+    'Access-Control-Request-Headers'
+  ],
+  optionsSuccessStatus: 200, // Some legacy browsers (IE11, various SmartTVs) choke on 204
+  maxAge: 86400 // 24 hours
 }));
 
 // Ensure we allow popups to be checked for window.closed in cross-origin cases
@@ -106,21 +100,7 @@ const mongoOptions = {
   minPoolSize: 5
 };
 
-// Global OPTIONS handler for any missed preflight requests
-app.options('*', (req, res) => {
-  const origin = req.headers.origin;
-  console.log(`[${new Date().toISOString()}] Global OPTIONS handler for: ${req.path} from origin: ${origin}`);
-  
-  // Check if origin is allowed
-  const isOriginAllowed = !origin || allowedOrigins.includes(origin);
-  const allowedOrigin = isOriginAllowed ? (origin || 'https://www.sochai.store') : 'https://www.sochai.store';
-  
-  res.header('Access-Control-Allow-Origin', allowedOrigin);
-  res.header('Access-Control-Allow-Methods', 'GET, HEAD, PUT, PATCH, POST, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.status(200).send('OK');
-});
+
 
 // Routes
 app.get('/', (req, res) => {
