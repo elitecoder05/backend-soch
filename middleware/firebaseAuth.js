@@ -1,4 +1,4 @@
-const admin = require('../services/firebaseAdmin');
+const { admin } = require('../services/firebaseAdmin');
 
 // Middleware to verify Firebase ID tokens (client-side JWTs from Firebase Auth)
 // Usage: add to routes that should accept Firebase tokens for authentication.

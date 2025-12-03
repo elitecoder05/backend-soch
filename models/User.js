@@ -3,15 +3,17 @@ const mongoose = require('mongoose');
 const userSchema = new mongoose.Schema({
   firstName: {
     type: String,
-    required: [true, 'First name is required'],
+    required: false, // Made optional for Google sign-in users
     trim: true,
-    maxlength: [50, 'First name cannot be more than 50 characters']
+    maxlength: [50, 'First name cannot be more than 50 characters'],
+    default: 'User'
   },
   lastName: {
     type: String,
-    required: [true, 'Last name is required'],
+    required: false, // Made optional for Google sign-in users
     trim: true,
-    maxlength: [50, 'Last name cannot be more than 50 characters']
+    maxlength: [50, 'Last name cannot be more than 50 characters'],
+    default: ''
   },
   email: {
     type: String,
@@ -26,7 +28,7 @@ const userSchema = new mongoose.Schema({
   },
   mobileNumber: {
     type: String,
-    required: [true, 'Mobile number is required'],
+    required: false, // Made optional for Google sign-in users
     trim: true,
     match: [
       /^[6-9]\d{9}$/,
@@ -35,8 +37,28 @@ const userSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    required: [true, 'Password is required'],
-    minlength: [6, 'Password must be at least 6 characters long']
+    required: false, // Made optional for Google sign-in users
+    validate: {
+      validator: function(v) {
+        // Only validate length if password is provided (not empty string)
+        return !v || v.length >= 6;
+      },
+      message: 'Password must be at least 6 characters long'
+    }
+  },
+  // Google authentication fields
+  googleUid: {
+    type: String,
+    sparse: true, // Allows null values but ensures uniqueness when present
+    unique: true
+  },
+  profilePicture: {
+    type: String,
+    default: ''
+  },
+  isEmailVerified: {
+    type: Boolean,
+    default: false
   },
   uploadedModels: [{
     type: mongoose.Schema.Types.ObjectId,
@@ -66,6 +88,36 @@ const userSchema = new mongoose.Schema({
   }
 }, {
   timestamps: true
+});
+
+// Custom validation: Either Google auth OR traditional signup is required
+userSchema.pre('save', function(next) {
+  // If this is a Google user (has googleUid), only email is required
+  if (this.googleUid) {
+    // Set default values for Google users if not provided
+    if (!this.firstName) this.firstName = 'User';
+    if (!this.lastName) this.lastName = '';
+    return next();
+  }
+  
+  // For traditional signup, all fields are required
+  if (!this.firstName) {
+    return next(new Error('First name is required for traditional signup'));
+  }
+  
+  if (!this.lastName) {
+    return next(new Error('Last name is required for traditional signup'));
+  }
+  
+  if (!this.mobileNumber) {
+    return next(new Error('Mobile number is required for traditional signup'));
+  }
+  
+  if (!this.password) {
+    return next(new Error('Password is required for traditional signup'));
+  }
+  
+  next();
 });
 
 // Remove password from JSON output

@@ -13,12 +13,12 @@ const { admin } = require('./services/firebaseAdmin');
 
 */
 
-const admin = require('firebase-admin');
+const adminLib = require('firebase-admin');
 
 function initFirebaseAdmin() {
-  if (admin.apps && admin.apps.length > 0) {
+  if (adminLib.apps && adminLib.apps.length > 0) {
     // Already initialized
-    return admin;
+    return adminLib;
   }
 
   const serviceAccountBase64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64 || process.env.FIREBASE_SERVICE_ACCOUNT;
@@ -28,12 +28,12 @@ function initFirebaseAdmin() {
       const jsonStr = Buffer.from(serviceAccountBase64, 'base64').toString('utf8');
       const serviceAccount = JSON.parse(jsonStr);
 
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
+      adminLib.initializeApp({
+        credential: adminLib.credential.cert(serviceAccount),
       });
 
       console.log('Firebase Admin initialized using FIREBASE_SERVICE_ACCOUNT_BASE64 / FIREBASE_SERVICE_ACCOUNT');
-      return admin;
+      return adminLib;
     } catch (err) {
       console.error('Failed to parse FIREBASE_SERVICE_ACCOUNT_BASE64:', err);
       throw err;
@@ -42,23 +42,38 @@ function initFirebaseAdmin() {
 
   // Fallback to GOOGLE_APPLICATION_CREDENTIALS that points to JSON file path.
   if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-    admin.initializeApp({
-      credential: admin.credential.applicationDefault(),
-    });
+    try {
+      adminLib.initializeApp({
+        credential: adminLib.credential.applicationDefault(),
+      });
 
-    console.log('Firebase Admin initialized using GOOGLE_APPLICATION_CREDENTIALS');
-    return admin;
+      console.log('Firebase Admin initialized using GOOGLE_APPLICATION_CREDENTIALS');
+      return adminLib;
+    } catch (err) {
+      console.error('Failed to initialize with GOOGLE_APPLICATION_CREDENTIALS:', err);
+      throw err;
+    }
   }
 
-  // If no credentials found, initialize default (limited) app — this will likely fail for admin operations but avoids crash in dev if desired.
-  try {
-    admin.initializeApp();
-    console.warn('Firebase Admin initialized with default credentials (this may be limited)');
-    return admin;
-  } catch (err) {
-    console.error('Unable to initialize Firebase Admin — please provide service account credentials');
-    throw err;
-  }
+  // For development: skip Firebase Admin initialization if no credentials
+  // This prevents the metadata server error in local development
+  console.warn('Firebase Admin not initialized: No service account credentials found.');
+  console.warn('Google Sign-in will not work without proper Firebase Admin credentials.');
+  console.warn('To enable Google Sign-in, provide one of the following environment variables:');
+  console.warn('- FIREBASE_SERVICE_ACCOUNT_BASE64 (base64 encoded service account JSON)');
+  console.warn('- GOOGLE_APPLICATION_CREDENTIALS (path to service account JSON file)');
+  
+  // Return null to indicate Firebase Admin is not available
+  return null;
 }
 
-module.exports = initFirebaseAdmin();
+// Initialize and export
+let admin = null;
+try {
+  admin = initFirebaseAdmin();
+} catch (error) {
+  console.error('Firebase Admin initialization failed:', error.message);
+  admin = null;
+}
+
+module.exports = { admin, initFirebaseAdmin };

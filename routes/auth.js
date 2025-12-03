@@ -2,6 +2,7 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const Joi = require('joi');
 const User = require('../models/User');
+const { admin, initFirebaseAdmin } = require('../services/firebaseAdmin');
 
 const router = express.Router();
 
@@ -168,8 +169,16 @@ router.post('/login', async (req, res) => {
       });
     }
 
-    // Check password
-    if (user.password !== password) {
+    // Check if user was created via Google (no password)
+    if (user.googleUid && !user.password) {
+      return res.status(400).json({
+        success: false,
+        message: 'This account was created with Google. Please use "Sign in with Google" to log in.'
+      });
+    }
+
+    // Check password for traditional users
+    if (!user.password || user.password !== password) {
       return res.status(401).json({
         success: false,
         message: 'Invalid email or password'
@@ -359,6 +368,117 @@ router.put('/admin/toggle-subscription/:userId', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// POST /api/auth/google-signin
+router.post('/google-signin', async (req, res) => {
+  try {
+    const authHeader = req.headers['authorization'] || '';
+    const matches = authHeader.match(/^Bearer (.*)$/);
+    const idToken = matches ? matches[1] : null;
+
+    if (!idToken) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Firebase ID token missing' 
+      });
+    }
+
+    // Check if Firebase Admin is properly initialized
+    if (!admin) {
+      return res.status(500).json({
+        success: false,
+        message: 'Google Sign-in is not available. Firebase Admin is not configured on the server.',
+        error: 'Firebase Admin not initialized'
+      });
+    }
+
+    // Verify the Firebase ID token
+    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    const { uid, email, name, picture } = decodedToken;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email is required for Google sign-in'
+      });
+    }
+
+    // Check if user already exists
+    let user = await User.findOne({ email: email.toLowerCase() });
+
+    if (user) {
+      // Update existing user with Google info if not already set
+      if (!user.googleUid) {
+        user.googleUid = uid;
+        user.profilePicture = picture || user.profilePicture;
+        await user.save();
+      }
+    } else {
+      // Create new user from Google account
+      const displayName = name || req.body.displayName || '';
+      const nameParts = displayName.split(' ');
+      const firstName = nameParts[0] || 'User';
+      const lastName = nameParts.slice(1).join(' ') || 'Unknown';
+
+      user = new User({
+        firstName,
+        lastName,
+        email: email.toLowerCase(),
+        googleUid: uid,
+        profilePicture: picture || req.body.photoURL || '',
+        mobileNumber: '', // Google sign-in doesn't provide mobile
+        password: '', // No password needed for Google sign-in
+        isEmailVerified: true, // Google accounts are pre-verified
+        subscriptionType: 'free',
+        isProUser: false,
+        subscriptionStatus: 'active'
+      });
+
+      await user.save();
+    }
+
+    // Generate JWT token for our system
+    const token = generateToken(user._id);
+
+    // Return success response
+    res.status(200).json({
+      success: true,
+      message: 'Google sign-in successful',
+      data: {
+        user: {
+          id: user._id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          mobileNumber: user.mobileNumber,
+          profilePicture: user.profilePicture,
+          subscriptionType: user.subscriptionType,
+          isProUser: user.isProUser,
+          subscriptionStatus: user.subscriptionStatus,
+          createdAt: user.createdAt,
+          isEmailVerified: user.isEmailVerified
+        },
+        token
+      }
+    });
+
+  } catch (error) {
+    console.error('Google sign-in error:', error);
+    
+    if (error.code && error.code.includes('auth/')) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid Firebase ID token'
+      });
+    }
+    
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error during Google sign-in',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
