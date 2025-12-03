@@ -15,6 +15,7 @@ A simple Node.js backend API with MongoDB integration.
 
 3. Configure environment variables:
    - Update `.env` file with your configuration
+  - If your frontend runs on a different domain, set `FRONTEND_URL` in your backend `.env` (for example `https://www.sochai.store`) so CORS can allow requests from that origin.
 
 4. Start the server:
    ```bash
@@ -271,6 +272,8 @@ This backend repo supports initializing the Firebase Admin SDK for server-side F
      ```
 
 2) Local dev (not recommended for production): Set `GOOGLE_APPLICATION_CREDENTIALS` to the path of the JSON service account file.
+
+Note: Do not store `GOOGLE_APPLICATION_CREDENTIALS` inside `.env` for deployed apps if your cloud provider injects platform credentials. If you already configured credentials in your cloud provider (e.g., GCP service account attached to the running instance or provider-managed secrets), remove `GOOGLE_APPLICATION_CREDENTIALS` from `.env` and allow your platform to provide credentials at runtime. For production, prefer `FIREBASE_SERVICE_ACCOUNT_BASE64` or platform IAM service accounts.
 
 The sample `services/firebaseAdmin.js` is auto required at server start — it reads these env vars and initializes admin accordingly.
 

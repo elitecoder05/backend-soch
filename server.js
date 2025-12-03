@@ -9,7 +9,40 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
-app.use(cors());
+// Configure CORS - allow frontend(s) defined in env vars or default to localhost + the production frontend
+const allowedOrigins = [
+  process.env.FRONTEND_URL || 'http://localhost:5173',
+  'https://www.sochai.store'
+];
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    // If no origin (e.g., server-to-server or same-origin), allow
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('Not allowed by CORS'));
+  },
+  methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization']
+};
+
+// Ensure we allow popups to be checked for window.closed in cross-origin cases
+// If your hosting provider already sets Cross-Origin-Opener-Policy, this may
+// be overridden at the platform level. For best compatibility with OAuth popups
+// (Google Sign-in popup), use `same-origin-allow-popups` where appropriate.
+app.use((req, res, next) => {
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+  // Do not set `Cross-Origin-Embedder-Policy` unless necessary; it can cause
+  // resource loading issues and stricter cross-origin restrictions.
+  next();
+});
+
+app.use(cors(corsOptions));
+// Enable preflight across all routes
+app.options('*', cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

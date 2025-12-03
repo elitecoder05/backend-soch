@@ -42,28 +42,29 @@ function initFirebaseAdmin() {
     }
   }
 
-  // Fallback to GOOGLE_APPLICATION_CREDENTIALS that points to JSON file path.
-  // If no env var is set, look for a commonly-named local credentials file and use it.
-  if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-    const localCandidate = path.join(process.cwd(), 'sochai-2025-firebase-adminsdk-fbsvc-31f0840034.json');
-    if (fs.existsSync(localCandidate)) {
-      process.env.GOOGLE_APPLICATION_CREDENTIALS = localCandidate;
-      console.log('Detected local Firebase service account:', localCandidate);
-    }
+  // Try to use application default credentials (ADC).
+  // This covers Cloud provider environments (Compute Engine, Cloud Run, etc.)
+  // that provide credentials via the metadata server without needing to set
+  // GOOGLE_APPLICATION_CREDENTIALS. Also, check for a local JSON file fallback
+  // (useful for local development) and set the env var only in that case.
+  const localCandidate = path.join(process.cwd(), 'sochai-2025-firebase-adminsdk-fbsvc-31f0840034.json');
+  if (!process.env.GOOGLE_APPLICATION_CREDENTIALS && fs.existsSync(localCandidate)) {
+    // Local dev convenience: set the env var to the local credentials file
+    // so applicationDefault() can pick it up.
+    process.env.GOOGLE_APPLICATION_CREDENTIALS = localCandidate;
+    console.log('Detected local Firebase service account:', localCandidate);
   }
 
-  if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-    try {
-      adminLib.initializeApp({
-        credential: adminLib.credential.applicationDefault(),
-      });
-
-      console.log('Firebase Admin initialized using GOOGLE_APPLICATION_CREDENTIALS');
-      return adminLib;
-    } catch (err) {
-      console.error('Failed to initialize with GOOGLE_APPLICATION_CREDENTIALS:', err);
-      throw err;
-    }
+  try {
+    adminLib.initializeApp({
+      credential: adminLib.credential.applicationDefault(),
+    });
+    console.log('Firebase Admin initialized using applicationDefault()');
+    return adminLib;
+  } catch (err) {
+    // If ADC is unavailable, initialization will throw — we'll catch the error
+    // and log a friendly message below explaining available options.
+    console.error('Failed to initialize with applicationDefault():', err.message);
   }
 
   // For development: skip Firebase Admin initialization if no credentials
