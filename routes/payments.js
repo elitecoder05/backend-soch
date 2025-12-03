@@ -16,6 +16,17 @@ const planAmountMap = {
   enterprise: 9900 * 100 // ₹9,900.00 (paise)
 };
 
+// Diagnostic route (GET /api/payments) to verify mounting
+router.get('/', (req, res) => {
+  return res.json({ success: true, message: 'Payments routes are mounted and working' });
+});
+
+// Simple request logger for payments router (POST/GET)
+router.use((req, res, next) => {
+  console.log(`[Payments Router] ${req.method} ${req.path}`);
+  next();
+});
+
 // Create an order for a selected plan
 router.post('/create-order', async (req, res) => {
   try {
