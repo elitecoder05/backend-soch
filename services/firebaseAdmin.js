@@ -13,6 +13,8 @@ const { admin } = require('./services/firebaseAdmin');
 
 */
 
+const fs = require('fs');
+const path = require('path');
 const adminLib = require('firebase-admin');
 
 function initFirebaseAdmin() {
@@ -41,6 +43,15 @@ function initFirebaseAdmin() {
   }
 
   // Fallback to GOOGLE_APPLICATION_CREDENTIALS that points to JSON file path.
+  // If no env var is set, look for a commonly-named local credentials file and use it.
+  if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+    const localCandidate = path.join(process.cwd(), 'sochai-2025-firebase-adminsdk-fbsvc-31f0840034.json');
+    if (fs.existsSync(localCandidate)) {
+      process.env.GOOGLE_APPLICATION_CREDENTIALS = localCandidate;
+      console.log('Detected local Firebase service account:', localCandidate);
+    }
+  }
+
   if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
     try {
       adminLib.initializeApp({
