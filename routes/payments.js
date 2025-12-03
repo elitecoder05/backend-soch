@@ -4,10 +4,17 @@ const Razorpay = require('razorpay');
 const User = require('../models/User');
 const { authenticateToken } = require('../middleware/auth');
 
-const key_id = process.env.RAZORPAY_KEY_ID || '';
-const key_secret = process.env.RAZORPAY_KEY_SECRET || '';
+const key_id = process.env.RAZORPAY_KEY_ID;
+const key_secret = process.env.RAZORPAY_KEY_SECRET;
 
-const razorpay = new Razorpay({ key_id, key_secret });
+// Only initialize Razorpay if keys are provided
+let razorpay = null;
+if (key_id && key_secret) {
+  razorpay = new Razorpay({ key_id, key_secret });
+  console.log('Razorpay initialized successfully');
+} else {
+  console.warn('Razorpay not initialized: RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET are required');
+}
 
 // Simple mapping of planId -> amount (in paise). Adjust amounts as needed.
 // NOTE: frontend plans should pass `apiPlanId` values such as 'monthly', 'six_months', 'annual', etc.
@@ -54,6 +61,10 @@ router.post('/create-order', async (req, res) => {
       receipt: `receipt_${Date.now()}`,
       payment_capture: 1
     };
+
+    if (!razorpay) {
+      return res.status(503).json({ success: false, message: 'Payment service not configured. Missing Razorpay credentials.' });
+    }
 
     console.log('Creating Razorpay order', { planId, amount });
     const order = await razorpay.orders.create(options);
@@ -110,6 +121,10 @@ router.post('/complete-subscription', authenticateToken, async (req, res) => {
     }
 
     // Validate the order amount matches the expected plan amount to avoid tampering
+    if (!razorpay) {
+      return res.status(503).json({ success: false, message: 'Payment service not configured. Missing Razorpay credentials.' });
+    }
+
     try {
       const fetchedOrder = await razorpay.orders.fetch(razorpay_order_id);
       if (!fetchedOrder || !fetchedOrder.amount) {
