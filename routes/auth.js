@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const Joi = require('joi');
 const User = require('../models/User');
 const { admin, initFirebaseAdmin } = require('../services/firebaseAdmin');
+const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -98,7 +99,13 @@ router.post('/signup', async (req, res) => {
       lastName,
       email: email.toLowerCase(),
       mobileNumber,
-      password
+      password,
+      // Give new users a 14-day trial with pro privileges
+      subscriptionType: 'trial',
+      isProUser: true,
+      subscriptionStatus: 'trial',
+      subscriptionStartDate: new Date(),
+      subscriptionEndDate: (function() { const d = new Date(); d.setDate(d.getDate() + 14); return d; })()
     });
 
     await user.save();
@@ -119,7 +126,9 @@ router.post('/signup', async (req, res) => {
           createdAt: user.createdAt,
           subscriptionType: user.subscriptionType,
           subscriptionStatus: user.subscriptionStatus,
-          isProUser: user.isProUser
+          isProUser: user.isProUser,
+          subscriptionStartDate: user.subscriptionStartDate,
+          subscriptionEndDate: user.subscriptionEndDate
         },
         token
       }
@@ -201,7 +210,9 @@ router.post('/login', async (req, res) => {
           createdAt: user.createdAt,
           subscriptionType: user.subscriptionType,
           subscriptionStatus: user.subscriptionStatus,
-          isProUser: user.isProUser
+          isProUser: user.isProUser,
+          subscriptionStartDate: user.subscriptionStartDate,
+          subscriptionEndDate: user.subscriptionEndDate
         },
         token
       }
@@ -235,7 +246,7 @@ router.put('/admin/update-subscription/:userId', async (req, res) => {
     
     // Validation schema for subscription update
     const subscriptionUpdateSchema = Joi.object({
-      subscriptionType: Joi.string().valid('free', 'pro', 'enterprise').required(),
+      subscriptionType: Joi.string().valid('free', 'trial', 'pro', 'enterprise').required(),
       isProUser: Joi.boolean().required()
     });
     
@@ -437,9 +448,12 @@ router.post('/google-signin', async (req, res) => {
         mobileNumber: '', // Google sign-in doesn't provide mobile
         password: '', // No password needed for Google sign-in
         isEmailVerified: true, // Google accounts are pre-verified
-        subscriptionType: 'free',
-        isProUser: false,
-        subscriptionStatus: 'active'
+        // Give Google signups a 14-day trial by default
+        subscriptionType: 'trial',
+        isProUser: true,
+        subscriptionStatus: 'trial',
+        subscriptionStartDate: new Date(),
+        subscriptionEndDate: (function() { const d = new Date(); d.setDate(d.getDate() + 14); return d; })()
       });
 
       await user.save();
@@ -464,7 +478,9 @@ router.post('/google-signin', async (req, res) => {
           isProUser: user.isProUser,
           subscriptionStatus: user.subscriptionStatus,
           createdAt: user.createdAt,
-          isEmailVerified: user.isEmailVerified
+          isEmailVerified: user.isEmailVerified,
+          subscriptionStartDate: user.subscriptionStartDate,
+          subscriptionEndDate: user.subscriptionEndDate
         },
         token
       }
@@ -486,6 +502,46 @@ router.post('/google-signin', async (req, res) => {
       error: process.env.NODE_ENV === 'development' ? error.message : undefined,
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
+  }
+});
+
+// GET /api/auth/me - return current user and auto-downgrade expired subscriptions
+router.get('/me', authenticateToken, async (req, res) => {
+  try {
+    const user = req.user; // set by authenticateToken middleware
+
+    // If user has a subscriptionEndDate and it's in the past, downgrade to free
+    if (user.subscriptionEndDate && new Date() > new Date(user.subscriptionEndDate)) {
+      user.subscriptionType = 'free';
+      user.isProUser = false;
+      user.subscriptionStatus = 'inactive';
+      user.subscriptionStartDate = null;
+      user.subscriptionEndDate = null;
+      await user.save();
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        user: {
+          id: user._id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          mobileNumber: user.mobileNumber,
+          profilePicture: user.profilePicture,
+          subscriptionType: user.subscriptionType,
+          isProUser: user.isProUser,
+          subscriptionStatus: user.subscriptionStatus,
+          subscriptionStartDate: user.subscriptionStartDate,
+          subscriptionEndDate: user.subscriptionEndDate,
+          createdAt: user.createdAt
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Get profile error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch profile' });
   }
 });
 

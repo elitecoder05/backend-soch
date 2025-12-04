@@ -146,6 +146,36 @@ router.post('/complete-subscription', authenticateToken, async (req, res) => {
     user.subscriptionStatus = 'active';
     user.subscriptionStartDate = new Date();
 
+    // Calculate subscription end date based on plan
+    const start = new Date();
+    let end = null;
+    switch (planId) {
+      case 'monthly':
+        end = new Date(start);
+        end.setMonth(end.getMonth() + 1);
+        break;
+      case 'six_months':
+        end = new Date(start);
+        end.setMonth(end.getMonth() + 6);
+        break;
+      case 'annual':
+        end = new Date(start);
+        end.setFullYear(end.getFullYear() + 1);
+        break;
+      case 'pro':
+        end = new Date(start);
+        end.setMonth(end.getMonth() + 1);
+        break;
+      case 'enterprise':
+        end = new Date(start);
+        end.setFullYear(end.getFullYear() + 1);
+        break;
+      default:
+        end = null;
+    }
+
+    user.subscriptionEndDate = end;
+
     await user.save();
 
     res.status(200).json({
@@ -159,7 +189,9 @@ router.post('/complete-subscription', authenticateToken, async (req, res) => {
           email: user.email,
           subscriptionType: user.subscriptionType,
           isProUser: user.isProUser,
-          subscriptionStatus: user.subscriptionStatus
+          subscriptionStatus: user.subscriptionStatus,
+          subscriptionStartDate: user.subscriptionStartDate,
+          subscriptionEndDate: user.subscriptionEndDate
         }
       }
     });
