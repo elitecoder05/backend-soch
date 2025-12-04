@@ -285,6 +285,64 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// POST /api/models/:id/click - Record a click/view for a model (Protected - dedupes per authenticated user)
+router.post('/:id/click', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const mongoose = require('mongoose');
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: 'Invalid model ID format' });
+    }
+
+    const model = await Model.findById(id);
+    if (!model) {
+      return res.status(404).json({ success: false, message: 'Model not found' });
+    }
+
+    // If the user already clicked, don't increment again
+    const userIdStr = req.user._id.toString();
+    const alreadyClicked = (model.clicksBy || []).some(id => id.toString() === userIdStr);
+    if (alreadyClicked) {
+      return res.json({ success: true, message: 'Already recorded', data: { clicks: model.clicks } });
+    }
+
+    model.clicks = (model.clicks || 0) + 1;
+    model.clicksBy = model.clicksBy || [];
+    model.clicksBy.push(req.user._id);
+
+    await model.save();
+
+    return res.json({ success: true, message: 'Click recorded', data: { clicks: model.clicks } });
+  } catch (error) {
+    console.error('Record click error:', error);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
+// POST /api/models/:id/click/anon - Record a click for anonymous user (no server-side dedupe)
+router.post('/:id/click/anon', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const mongoose = require('mongoose');
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: 'Invalid model ID format' });
+    }
+
+    const model = await Model.findById(id);
+    if (!model) {
+      return res.status(404).json({ success: false, message: 'Model not found' });
+    }
+
+    model.clicks = (model.clicks || 0) + 1;
+    await model.save();
+
+    return res.json({ success: true, message: 'Anonymous click recorded', data: { clicks: model.clicks } });
+  } catch (error) {
+    console.error('Record anonymous click error:', error);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
 // PUT /api/models/:id - Update a model (Protected - only owner)
 router.put('/:id', authenticateToken, async (req, res) => {
   try {

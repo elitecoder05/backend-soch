@@ -140,6 +140,16 @@ const modelSchema = new mongoose.Schema({
     type: String,
     trim: true
   }
+  ,
+  clicks: {
+    type: Number,
+    default: 0,
+    min: [0, 'Clicks cannot be negative']
+  },
+  clicksBy: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }]
 }, {
   timestamps: true
 });
