@@ -145,6 +145,7 @@ router.post('/complete-subscription', authenticateToken, async (req, res) => {
     user.isProUser = isProUser;
     user.subscriptionStatus = 'active';
     user.subscriptionStartDate = new Date();
+    user.subscriptionPlanId = planId;
 
     // Calculate subscription end date based on plan
     const start = new Date();
@@ -191,7 +192,8 @@ router.post('/complete-subscription', authenticateToken, async (req, res) => {
           isProUser: user.isProUser,
           subscriptionStatus: user.subscriptionStatus,
           subscriptionStartDate: user.subscriptionStartDate,
-          subscriptionEndDate: user.subscriptionEndDate
+          subscriptionEndDate: user.subscriptionEndDate,
+          subscriptionPlanId: user.subscriptionPlanId
         }
       }
     });

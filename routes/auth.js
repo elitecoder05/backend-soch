@@ -128,7 +128,8 @@ router.post('/signup', async (req, res) => {
           subscriptionStatus: user.subscriptionStatus,
           isProUser: user.isProUser,
           subscriptionStartDate: user.subscriptionStartDate,
-          subscriptionEndDate: user.subscriptionEndDate
+          subscriptionEndDate: user.subscriptionEndDate,
+          subscriptionPlanId: user.subscriptionPlanId
         },
         token
       }
@@ -212,7 +213,8 @@ router.post('/login', async (req, res) => {
           subscriptionStatus: user.subscriptionStatus,
           isProUser: user.isProUser,
           subscriptionStartDate: user.subscriptionStartDate,
-          subscriptionEndDate: user.subscriptionEndDate
+          subscriptionEndDate: user.subscriptionEndDate,
+          subscriptionPlanId: user.subscriptionPlanId
         },
         token
       }
@@ -480,7 +482,8 @@ router.post('/google-signin', async (req, res) => {
           createdAt: user.createdAt,
           isEmailVerified: user.isEmailVerified,
           subscriptionStartDate: user.subscriptionStartDate,
-          subscriptionEndDate: user.subscriptionEndDate
+          subscriptionEndDate: user.subscriptionEndDate,
+          subscriptionPlanId: user.subscriptionPlanId
         },
         token
       }
@@ -535,7 +538,8 @@ router.get('/me', authenticateToken, async (req, res) => {
           subscriptionStatus: user.subscriptionStatus,
           subscriptionStartDate: user.subscriptionStartDate,
           subscriptionEndDate: user.subscriptionEndDate,
-          createdAt: user.createdAt
+          createdAt: user.createdAt,
+          subscriptionPlanId: user.subscriptionPlanId
         }
       }
     });

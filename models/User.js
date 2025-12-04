@@ -82,6 +82,10 @@ const userSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+  subscriptionPlanId: {
+    type: String,
+    default: null
+  },
   isProUser: {
     type: Boolean,
     default: false
