@@ -18,6 +18,16 @@ A simple Node.js backend API with MongoDB integration.
   - If your frontend runs on a different domain, set `FRONTEND_URL` in your backend `.env` (for example `https://www.sochai.store`) so CORS can allow requests from that origin.
 
 4. Start the server:
+
+
+
+
+
+
+
+
+
+
    ```bash
    # Development mode (with nodemon)
    npm run dev
