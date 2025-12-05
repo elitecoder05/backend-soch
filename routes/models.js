@@ -359,13 +359,8 @@ router.put('/:id', authenticateToken, async (req, res) => {
       });
     }
 
-    // Only allow editing if status is pending or rejected
-    if (model.status === 'approved') {
-      return res.status(400).json({
-        success: false,
-        message: 'Cannot edit an approved model. Contact support if changes are needed.'
-      });
-    }
+    // Allow editing models in any status, but reset approved models to pending
+    const wasApproved = model.status === 'approved';
 
     // Validate update data
     const { error, value } = modelSchema.validate(req.body);
@@ -379,8 +374,8 @@ router.put('/:id', authenticateToken, async (req, res) => {
 
     // Update model
     Object.assign(model, value);
-    if (model.status === 'rejected') {
-      model.status = 'pending'; // Reset to pending when updating a rejected model
+    if (model.status === 'rejected' || wasApproved) {
+      model.status = 'pending'; // Reset to pending when updating a rejected or approved model
       model.rejectionReason = undefined;
     }
 
