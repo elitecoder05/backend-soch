@@ -574,4 +574,77 @@ router.get('/admin/all', async (req, res) => {
   }
 });
 
+// PUT /api/models/admin/:id/trending - Update trending/featured metadata (Admin)
+router.put('/admin/:id/trending', async (req, res) => {
+  try {
+    const { trendingScore, categoryTrendingScore, featured } = req.body;
+
+    const updates = {};
+
+    // Validate and collect updates
+    if (trendingScore !== undefined) {
+      if (typeof trendingScore !== 'number' || trendingScore < 0 || trendingScore > 100) {
+        return res.status(400).json({
+          success: false,
+          message: 'Trending score must be a number between 0 and 100'
+        });
+      }
+      updates.trendingScore = trendingScore;
+    }
+
+    if (categoryTrendingScore !== undefined) {
+      if (typeof categoryTrendingScore !== 'number' || categoryTrendingScore < 0 || categoryTrendingScore > 100) {
+        return res.status(400).json({
+          success: false,
+          message: 'Category trending score must be a number between 0 and 100'
+        });
+      }
+      updates.categoryTrendingScore = categoryTrendingScore;
+    }
+
+    if (featured !== undefined) {
+      if (typeof featured !== 'boolean') {
+        return res.status(400).json({
+          success: false,
+          message: 'Featured must be a boolean value'
+        });
+      }
+      updates.featured = featured;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Provide at least one of trendingScore, categoryTrendingScore, or featured to update'
+      });
+    }
+
+    const model = await Model.findByIdAndUpdate(
+      req.params.id,
+      { $set: updates },
+      { new: true }
+    ).populate('uploadedBy', 'firstName lastName email');
+
+    if (!model) {
+      return res.status(404).json({
+        success: false,
+        message: 'Model not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Trending settings updated',
+      data: { model }
+    });
+  } catch (error) {
+    console.error('Update model trending error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
 module.exports = router;

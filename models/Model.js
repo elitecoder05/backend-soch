@@ -111,6 +111,12 @@ const modelSchema = new mongoose.Schema({
     min: [0, 'Trending score cannot be negative'],
     max: [100, 'Trending score cannot be more than 100']
   },
+  categoryTrendingScore: {
+    type: Number,
+    default: 0,
+    min: [0, 'Category trending score cannot be negative'],
+    max: [100, 'Category trending score cannot be more than 100']
+  },
   bestFor: [{
     type: String,
     trim: true,
@@ -189,5 +195,6 @@ modelSchema.pre('save', async function(next) {
 modelSchema.index({ category: 1, status: 1 });
 modelSchema.index({ uploadedBy: 1 });
 modelSchema.index({ featured: -1, trendingScore: -1 });
+modelSchema.index({ categoryTrendingScore: -1, category: 1 });
 
 module.exports = mongoose.model('Model', modelSchema);
