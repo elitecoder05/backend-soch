@@ -244,6 +244,68 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET /api/models/search/suggestions - Quick search suggestions with name and icon (Public)
+// IMPORTANT: This route must be defined before /:id to avoid being matched as an ID
+router.get('/search/suggestions', async (req, res) => {
+  try {
+    const { q, limit = 8 } = req.query;
+    
+    if (!q || q.trim().length < 2) {
+      return res.json({
+        success: true,
+        data: { suggestions: [] }
+      });
+    }
+
+    const searchQuery = q.trim();
+    
+    // Build search filter for approved models
+    const filter = {
+      status: 'approved',
+      $or: [
+        { name: { $regex: searchQuery, $options: 'i' } },
+        { shortDescription: { $regex: searchQuery, $options: 'i' } },
+        { tags: { $in: [new RegExp(searchQuery, 'i')] } },
+        { category: { $regex: searchQuery, $options: 'i' } },
+        { provider: { $regex: searchQuery, $options: 'i' } }
+      ]
+    };
+
+    // Find models matching the search, only select necessary fields for performance
+    const models = await Model.find(filter)
+      .select('_id name slug iconUrl shortDescription category provider pricing')
+      .sort({ trendingScore: -1, featured: -1, createdAt: -1 })
+      .limit(parseInt(limit));
+
+    const suggestions = models.map(model => ({
+      id: model._id,
+      name: model.name,
+      slug: model.slug,
+      iconUrl: model.iconUrl || null,
+      shortDescription: model.shortDescription,
+      category: model.category,
+      provider: model.provider,
+      pricing: model.pricing
+    }));
+
+    res.json({
+      success: true,
+      data: { 
+        suggestions,
+        query: searchQuery
+      }
+    });
+
+  } catch (error) {
+    console.error('Search suggestions error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
 // GET /api/models/:id - Get a specific model by ID (Public)
 router.get('/:id', async (req, res) => {
   try {
