@@ -154,6 +154,108 @@ router.post('/', authenticateToken, async (req, res) => {
   }
 });
 
+// POST /api/models/bulk - Bulk upload multiple AI models (Protected)
+// Accepts an array of model objects in the request body.
+router.post('/bulk', authenticateToken, async (req, res) => {
+  try {
+    // Only pro users may upload models
+    if (!req.user.isProUser) {
+      return res.status(403).json({
+        success: false,
+        message: 'Pro subscription required to upload models. Please upgrade your subscription to continue.'
+      });
+    }
+
+    // Validate that body is an array of models
+    const bulkSchema = Joi.array().items(modelSchema).min(1).max(50).messages({
+      'array.base': 'Request body must be an array of model objects',
+      'array.min': 'At least one model must be provided',
+      'array.max': 'Maximum 50 models allowed in a single bulk upload'
+    });
+
+    const { error, value } = bulkSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation error',
+        errors: error.details.map(detail => detail.message)
+      });
+    }
+
+    const modelsArray = value; // validated array
+
+    // Detect duplicate names inside the payload
+    const nameCounts = {};
+    modelsArray.forEach(m => {
+      const n = (m.name || '').trim();
+      nameCounts[n] = (nameCounts[n] || 0) + 1;
+    });
+
+    const duplicateInPayload = Object.entries(nameCounts)
+      .filter(([, cnt]) => cnt > 1)
+      .map(([name]) => name);
+
+    // Fetch existing models for this user that match any of the names
+    const names = modelsArray.map(m => m.name.trim());
+    const existing = await Model.find({ name: { $in: names }, uploadedBy: req.user._id }).select('name');
+    const existingNames = existing.map(e => e.name);
+
+    const errors = [];
+    const toCreate = [];
+
+    modelsArray.forEach((m, idx) => {
+      const name = m.name.trim();
+      if (duplicateInPayload.includes(name)) {
+        errors.push({ index: idx, name, message: 'Duplicate model name in payload' });
+        return;
+      }
+      if (existingNames.includes(name)) {
+        errors.push({ index: idx, name, message: 'You have already uploaded a model with this name' });
+        return;
+      }
+
+      toCreate.push({ ...m, uploadedBy: req.user._id });
+    });
+
+    let created = [];
+    if (toCreate.length > 0) {
+      // Insert many
+      const inserted = await Model.insertMany(toCreate);
+
+      // Update user's uploadedModels array with all new ids
+      await User.findByIdAndUpdate(req.user._id, { $push: { uploadedModels: { $each: inserted.map(i => i._id) } } });
+
+      created = inserted.map(model => ({
+        id: model._id,
+        name: model.name,
+        slug: model.slug,
+        shortDescription: model.shortDescription,
+        category: model.category,
+        provider: model.provider,
+        status: model.status,
+        createdAt: model.createdAt
+      }));
+    }
+
+    res.status(created.length > 0 ? 201 : 400).json({
+      success: created.length > 0,
+      message: created.length > 0 ? 'Bulk upload processed' : 'No models were created',
+      data: {
+        created,
+        errors
+      }
+    });
+
+  } catch (error) {
+    console.error('Bulk model upload error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
 // GET /api/models/my-models - Get user's uploaded models (Protected)
 router.get('/my-models', authenticateToken, async (req, res) => {
   try {
