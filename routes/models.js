@@ -1,3 +1,972 @@
+// // const express = require('express');
+// // const Joi = require('joi');
+// // const Model = require('../models/Model');
+// // const User = require('../models/User');
+// // const { authenticateToken } = require('../middleware/auth');
+
+// // const router = express.Router();
+
+// // // Validation schema for model upload
+// // const modelSchema = Joi.object({
+// //   name: Joi.string().trim().max(100).required().messages({
+// //     'string.empty': 'Model name is required',
+// //     'string.max': 'Model name cannot be more than 100 characters',
+// //     'any.required': 'Model name is required'
+// //   }),
+// //   shortDescription: Joi.string().trim().max(200).required().messages({
+// //     'string.empty': 'Short description is required',
+// //     'string.max': 'Short description cannot be more than 200 characters',
+// //     'any.required': 'Short description is required'
+// //   }),
+// //   longDescription: Joi.string().trim().max(2000).allow('').messages({
+// //     'string.max': 'Long description cannot be more than 2000 characters'
+// //   }),
+// //   category: Joi.string().valid(
+// //     'chatbots', 'image', 'code', 'productivity', 'voice', 
+// //     'writing', 'research', 'agents', 'video', 'audio', 
+// //     'data-analysis', 'language', 'design', 'automation', 
+// //     'healthcare', 'education', 'marketing', 'finance'
+// //   ).required().messages({
+// //     'any.only': 'Please select a valid category',
+// //     'any.required': 'Category is required'
+// //   }),
+// //   tags: Joi.array().items(
+// //     Joi.string().trim().max(30).messages({
+// //       'string.max': 'Each tag cannot be more than 30 characters'
+// //     })
+// //   ).default([]),
+// //   provider: Joi.string().trim().max(50).required().messages({
+// //     'string.empty': 'Provider is required',
+// //     'string.max': 'Provider name cannot be more than 50 characters',
+// //     'any.required': 'Provider is required'
+// //   }),
+// //   pricing: Joi.string().valid('free', 'freemium', 'paid').default('freemium'),
+// //   capabilities: Joi.array().items(
+// //     Joi.string().valid('text', 'image', 'audio', 'video', 'code', 'agent')
+// //   ).default([]),
+// //   isApiAvailable: Joi.boolean().default(false),
+// //   isOpenSource: Joi.boolean().default(false),
+// //   modelType: Joi.string().trim().max(50).allow('').messages({
+// //     'string.max': 'Model type cannot be more than 50 characters'
+// //   }),
+// //   externalUrl: Joi.string().uri().allow('').messages({
+// //     'string.uri': 'Please enter a valid URL'
+// //   }),
+// //   bestFor: Joi.array().items(
+// //     Joi.string().trim().max(50).messages({
+// //       'string.max': 'Each "best for" item cannot be more than 50 characters'
+// //     })
+// //   ).default([]),
+// //   features: Joi.array().items(
+// //     Joi.string().trim().max(100).messages({
+// //       'string.max': 'Each feature cannot be more than 100 characters'
+// //     })
+// //   ).default([]),
+// //   examplePrompts: Joi.array().items(
+// //     Joi.string().trim().max(200).messages({
+// //       'string.max': 'Each example prompt cannot be more than 200 characters'
+// //     })
+// //   ).default([]),
+// //   iconUrl: Joi.string().uri().allow('').messages({
+// //     'string.uri': 'Please enter a valid icon URL'
+// //   }),
+// //   screenshots: Joi.array().items(
+// //     Joi.string().uri().messages({
+// //       'string.uri': 'Please enter valid screenshot URLs'
+// //     })
+// //   ).max(4).default([]).messages({
+// //     'array.max': 'Maximum 4 screenshots allowed'
+// //   })
+// // });
+
+// // // POST /api/models - Upload a new AI model (Protected)
+// // router.post('/', authenticateToken, async (req, res) => {
+// //   try {
+// //     // Check if user is a pro user
+// //     if (!req.user.isProUser) {
+// //       return res.status(403).json({
+// //         success: false,
+// //         message: 'Pro subscription required to upload models. Please upgrade your subscription to continue.'
+// //       });
+// //     }
+
+// //     // Validate input data
+// //     const { error, value } = modelSchema.validate(req.body);
+// //     if (error) {
+// //       return res.status(400).json({
+// //         success: false,
+// //         message: 'Validation error',
+// //         errors: error.details.map(detail => detail.message)
+// //       });
+// //     }
+
+// //     // Check if model with same name already exists for this user
+// //     const existingModel = await Model.findOne({ 
+// //       name: value.name,
+// //       uploadedBy: req.user._id 
+// //     });
+
+// //     if (existingModel) {
+// //       return res.status(400).json({
+// //         success: false,
+// //         message: 'You have already uploaded a model with this name'
+// //       });
+// //     }
+
+// //     // Create new model
+// //     const model = new Model({
+// //       ...value,
+// //       uploadedBy: req.user._id
+// //     });
+
+// //     await model.save();
+
+// //     // Add model to user's uploadedModels array
+// //     await User.findByIdAndUpdate(
+// //       req.user._id,
+// //       { $push: { uploadedModels: model._id } }
+// //     );
+
+// //     res.status(201).json({
+// //       success: true,
+// //       message: 'Model uploaded successfully and is pending review',
+// //       data: {
+// //         model: {
+// //           id: model._id,
+// //           name: model.name,
+// //           slug: model.slug,
+// //           shortDescription: model.shortDescription,
+// //           category: model.category,
+// //           provider: model.provider,
+// //           status: model.status,
+// //           createdAt: model.createdAt
+// //         }
+// //       }
+// //     });
+
+// //   } catch (error) {
+// //     console.error('Model upload error:', error);
+// //     res.status(500).json({
+// //       success: false,
+// //       message: 'Internal server error',
+// //       error: process.env.NODE_ENV === 'development' ? error.message : undefined
+// //     });
+// //   }
+// // });
+
+// // // POST /api/models/bulk - Bulk upload multiple AI models (Protected)
+// // // Accepts an array of model objects in the request body.
+// // router.post('/bulk', authenticateToken, async (req, res) => {
+// //   try {
+// //     // Only pro users may upload models
+// //     if (!req.user.isProUser) {
+// //       return res.status(403).json({
+// //         success: false,
+// //         message: 'Pro subscription required to upload models. Please upgrade your subscription to continue.'
+// //       });
+// //     }
+
+// //     // Validate that body is an array of models
+// //     const bulkSchema = Joi.array().items(modelSchema).min(1).max(50).messages({
+// //       'array.base': 'Request body must be an array of model objects',
+// //       'array.min': 'At least one model must be provided',
+// //       'array.max': 'Maximum 50 models allowed in a single bulk upload'
+// //     });
+
+// //     const { error, value } = bulkSchema.validate(req.body);
+// //     if (error) {
+// //       return res.status(400).json({
+// //         success: false,
+// //         message: 'Validation error',
+// //         errors: error.details.map(detail => detail.message)
+// //       });
+// //     }
+
+// //     const modelsArray = value; // validated array
+
+// //     // Detect duplicate names inside the payload
+// //     const nameCounts = {};
+// //     modelsArray.forEach(m => {
+// //       const n = (m.name || '').trim();
+// //       nameCounts[n] = (nameCounts[n] || 0) + 1;
+// //     });
+
+// //     const duplicateInPayload = Object.entries(nameCounts)
+// //       .filter(([, cnt]) => cnt > 1)
+// //       .map(([name]) => name);
+
+// //     // Fetch existing models for this user that match any of the names
+// //     const names = modelsArray.map(m => m.name.trim());
+// //     const existing = await Model.find({ name: { $in: names }, uploadedBy: req.user._id }).select('name');
+// //     const existingNames = existing.map(e => e.name);
+
+// //     const errors = [];
+// //     const toCreate = [];
+
+// //     modelsArray.forEach((m, idx) => {
+// //       const name = m.name.trim();
+// //       if (duplicateInPayload.includes(name)) {
+// //         errors.push({ index: idx, name, message: 'Duplicate model name in payload' });
+// //         return;
+// //       }
+// //       if (existingNames.includes(name)) {
+// //         errors.push({ index: idx, name, message: 'You have already uploaded a model with this name' });
+// //         return;
+// //       }
+
+// //       toCreate.push({ ...m, uploadedBy: req.user._id });
+// //     });
+
+// //     let created = [];
+// //     if (toCreate.length > 0) {
+// //       // Insert many
+// //       const inserted = await Model.insertMany(toCreate);
+
+// //       // Update user's uploadedModels array with all new ids
+// //       await User.findByIdAndUpdate(req.user._id, { $push: { uploadedModels: { $each: inserted.map(i => i._id) } } });
+
+// //       created = inserted.map(model => ({
+// //         id: model._id,
+// //         name: model.name,
+// //         slug: model.slug,
+// //         shortDescription: model.shortDescription,
+// //         category: model.category,
+// //         provider: model.provider,
+// //         status: model.status,
+// //         createdAt: model.createdAt
+// //       }));
+// //     }
+
+// //     res.status(created.length > 0 ? 201 : 400).json({
+// //       success: created.length > 0,
+// //       message: created.length > 0 ? 'Bulk upload processed' : 'No models were created',
+// //       data: {
+// //         created,
+// //         errors
+// //       }
+// //     });
+
+// //   } catch (error) {
+// //     console.error('Bulk model upload error:', error);
+// //     res.status(500).json({
+// //       success: false,
+// //       message: 'Internal server error',
+// //       error: process.env.NODE_ENV === 'development' ? error.message : undefined
+// //     });
+// //   }
+// // });
+
+// // // GET /api/models/my-models - Get user's uploaded models (Protected)
+// // router.get('/my-models', authenticateToken, async (req, res) => {
+// //   try {
+// //     const models = await Model.find({ uploadedBy: req.user._id })
+// //       .sort({ createdAt: -1 })
+// //       .select('-uploadedBy');
+
+// //     res.json({
+// //       success: true,
+// //       data: {
+// //         models,
+// //         count: models.length
+// //       }
+// //     });
+
+// //   } catch (error) {
+// //     console.error('Get user models error:', error);
+// //     res.status(500).json({
+// //       success: false,
+// //       message: 'Internal server error',
+// //       error: process.env.NODE_ENV === 'development' ? error.message : undefined
+// //     });
+// //   }
+// // });
+
+// // // GET /api/models - Get all approved models (Public)
+// // router.get('/', async (req, res) => {
+// //   try {
+// //     const { category, pricing, page = 1, limit = 20, search, includePending } = req.query;
+// //     const skip = (page - 1) * limit;
+
+// //     // Build filter object
+// //     const filter = {};
+// //     // If includePending is true, show both approved and pending models, otherwise only approved
+// //     if (includePending === 'true') {
+// //       filter.status = { $in: ['approved', 'pending'] };
+// //     } else {
+// //       filter.status = 'approved';
+// //     }
+    
+// //     if (category && category !== 'all') {
+// //       filter.category = category;
+// //     }
+    
+// //     if (pricing && pricing !== 'all') {
+// //       filter.pricing = pricing;
+// //     }
+    
+// //     if (search) {
+// //       filter.$or = [
+// //         { name: { $regex: search, $options: 'i' } },
+// //         { shortDescription: { $regex: search, $options: 'i' } },
+// //         { tags: { $in: [new RegExp(search, 'i')] } }
+// //       ];
+// //     }
+
+// //     const models = await Model.find(filter)
+// //       .populate('uploadedBy', 'firstName lastName')
+// //       .sort({ featured: -1, trendingScore: -1, createdAt: -1 })
+// //       .skip(skip)
+// //       .limit(parseInt(limit))
+// //       .select('-rejectionReason');
+
+// //     const totalModels = await Model.countDocuments(filter);
+// //     const totalPages = Math.ceil(totalModels / limit);
+
+// //     res.json({
+// //       success: true,
+// //       data: {
+// //         models,
+// //         pagination: {
+// //           currentPage: parseInt(page),
+// //           totalPages,
+// //           totalModels,
+// //           hasNext: page < totalPages,
+// //           hasPrev: page > 1
+// //         }
+// //       }
+// //     });
+
+// //   } catch (error) {
+// //     console.error('Get models error:', error);
+// //     res.status(500).json({
+// //       success: false,
+// //       message: 'Internal server error',
+// //       error: process.env.NODE_ENV === 'development' ? error.message : undefined
+// //     });
+// //   }
+// // });
+
+// // // GET /api/models/search/suggestions - Quick search suggestions with name and icon (Public)
+// // // IMPORTANT: This route must be defined before /:id to avoid being matched as an ID
+// // router.get('/search/suggestions', async (req, res) => {
+// //   try {
+// //     const { q, limit = 8 } = req.query;
+    
+// //     if (!q || q.trim().length < 2) {
+// //       return res.json({
+// //         success: true,
+// //         data: { suggestions: [] }
+// //       });
+// //     }
+
+// //     const searchQuery = q.trim();
+    
+// //     // Build search filter for approved models
+// //     const filter = {
+// //       status: 'approved',
+// //       $or: [
+// //         { name: { $regex: searchQuery, $options: 'i' } },
+// //         { shortDescription: { $regex: searchQuery, $options: 'i' } },
+// //         { tags: { $in: [new RegExp(searchQuery, 'i')] } },
+// //         { category: { $regex: searchQuery, $options: 'i' } },
+// //         { provider: { $regex: searchQuery, $options: 'i' } }
+// //       ]
+// //     };
+
+// //     // Find models matching the search, only select necessary fields for performance
+// //     const models = await Model.find(filter)
+// //       .select('_id name slug iconUrl shortDescription category provider pricing')
+// //       .sort({ trendingScore: -1, featured: -1, createdAt: -1 })
+// //       .limit(parseInt(limit));
+
+// //     const suggestions = models.map(model => ({
+// //       id: model._id,
+// //       name: model.name,
+// //       slug: model.slug,
+// //       iconUrl: model.iconUrl || null,
+// //       shortDescription: model.shortDescription,
+// //       category: model.category,
+// //       provider: model.provider,
+// //       pricing: model.pricing
+// //     }));
+
+// //     res.json({
+// //       success: true,
+// //       data: { 
+// //         suggestions,
+// //         query: searchQuery
+// //       }
+// //     });
+
+// //   } catch (error) {
+// //     console.error('Search suggestions error:', error);
+// //     res.status(500).json({
+// //       success: false,
+// //       message: 'Internal server error',
+// //       error: process.env.NODE_ENV === 'development' ? error.message : undefined
+// //     });
+// //   }
+// // });
+
+// // // GET /api/models/:id - Get a specific model by ID (Public)
+// // router.get('/:id', async (req, res) => {
+// //   try {
+// //     const { id } = req.params;
+    
+// //     // Check if the id is a valid ObjectId
+// //     const mongoose = require('mongoose');
+// //     if (!mongoose.Types.ObjectId.isValid(id)) {
+// //       return res.status(400).json({
+// //         success: false,
+// //         message: 'Invalid model ID format'
+// //       });
+// //     }
+
+// //     const model = await Model.findOne({
+// //       _id: id,
+// //       status: 'approved'
+// //     }).populate('uploadedBy', 'firstName lastName');
+
+// //     if (!model) {
+// //       return res.status(404).json({
+// //         success: false,
+// //         message: 'Model not found'
+// //       });
+// //     }
+
+// //     res.json({
+// //       success: true,
+// //       data: { model }
+// //     });
+
+// //   } catch (error) {
+// //     console.error('Get model error:', error);
+// //     res.status(500).json({
+// //       success: false,
+// //       message: 'Internal server error',
+// //       error: process.env.NODE_ENV === 'development' ? error.message : undefined
+// //     });
+// //   }
+// // });
+
+// // // POST /api/models/:id/click - Record a click/view for a model (Protected - dedupes per authenticated user)
+// // router.post('/:id/click', authenticateToken, async (req, res) => {
+// //   try {
+// //     const { id } = req.params;
+// //     const mongoose = require('mongoose');
+// //     if (!mongoose.Types.ObjectId.isValid(id)) {
+// //       return res.status(400).json({ success: false, message: 'Invalid model ID format' });
+// //     }
+
+// //     const model = await Model.findById(id);
+// //     if (!model) {
+// //       return res.status(404).json({ success: false, message: 'Model not found' });
+// //     }
+
+// //     // If the user already clicked, don't increment again
+// //     const userIdStr = req.user._id.toString();
+// //     const alreadyClicked = (model.clicksBy || []).some(id => id.toString() === userIdStr);
+// //     if (alreadyClicked) {
+// //       return res.json({ success: true, message: 'Already recorded', data: { clicks: model.clicks } });
+// //     }
+
+// //     model.clicks = (model.clicks || 0) + 1;
+// //     model.clicksBy = model.clicksBy || [];
+// //     model.clicksBy.push(req.user._id);
+
+// //     await model.save();
+
+// //     return res.json({ success: true, message: 'Click recorded', data: { clicks: model.clicks } });
+// //   } catch (error) {
+// //     console.error('Record click error:', error);
+// //     return res.status(500).json({ success: false, message: 'Internal server error' });
+// //   }
+// // });
+
+// // // POST /api/models/:id/click/anon - Record a click for anonymous user (no server-side dedupe)
+// // router.post('/:id/click/anon', async (req, res) => {
+// //   try {
+// //     const { id } = req.params;
+// //     const mongoose = require('mongoose');
+// //     if (!mongoose.Types.ObjectId.isValid(id)) {
+// //       return res.status(400).json({ success: false, message: 'Invalid model ID format' });
+// //     }
+
+// //     const model = await Model.findById(id);
+// //     if (!model) {
+// //       return res.status(404).json({ success: false, message: 'Model not found' });
+// //     }
+
+// //     model.clicks = (model.clicks || 0) + 1;
+// //     await model.save();
+
+// //     return res.json({ success: true, message: 'Anonymous click recorded', data: { clicks: model.clicks } });
+// //   } catch (error) {
+// //     console.error('Record anonymous click error:', error);
+// //     return res.status(500).json({ success: false, message: 'Internal server error' });
+// //   }
+// // });
+
+// // // PUT /api/models/:id - Update a model (Protected - only owner)
+// // router.put('/:id', authenticateToken, async (req, res) => {
+// //   try {
+// //     // Find model by ID and check ownership
+// //     const model = await Model.findOne({
+// //       _id: req.params.id,
+// //       uploadedBy: req.user._id
+// //     });
+
+// //     if (!model) {
+// //       return res.status(404).json({
+// //         success: false,
+// //         message: 'Model not found or you do not have permission to edit it'
+// //       });
+// //     }
+
+// //     // Allow editing models in any status, but reset approved models to pending
+// //     const wasApproved = model.status === 'approved';
+
+// //     // Validate update data
+// //     const { error, value } = modelSchema.validate(req.body);
+// //     if (error) {
+// //       return res.status(400).json({
+// //         success: false,
+// //         message: 'Validation error',
+// //         errors: error.details.map(detail => detail.message)
+// //       });
+// //     }
+
+// //     // Update model
+// //     Object.assign(model, value);
+// //     if (model.status === 'rejected' || wasApproved) {
+// //       model.status = 'pending'; // Reset to pending when updating a rejected or approved model
+// //       model.rejectionReason = undefined;
+// //     }
+
+// //     await model.save();
+
+// //     res.json({
+// //       success: true,
+// //       message: 'Model updated successfully',
+// //       data: { model }
+// //     });
+
+// //   } catch (error) {
+// //     console.error('Update model error:', error);
+// //     res.status(500).json({
+// //       success: false,
+// //       message: 'Internal server error',
+// //       error: process.env.NODE_ENV === 'development' ? error.message : undefined
+// //     });
+// //   }
+// // });
+
+// // // DELETE /api/models/:id - Delete a model (Protected - only owner)
+// // router.delete('/:id', authenticateToken, async (req, res) => {
+// //   try {
+// //     const model = await Model.findOne({
+// //       _id: req.params.id,
+// //       uploadedBy: req.user._id
+// //     });
+
+// //     if (!model) {
+// //       return res.status(404).json({
+// //         success: false,
+// //         message: 'Model not found or you do not have permission to delete it'
+// //       });
+// //     }
+
+// //     await Model.findByIdAndDelete(req.params.id);
+
+// //     // Remove model from user's uploadedModels array
+// //     await User.findByIdAndUpdate(
+// //       req.user._id,
+// //       { $pull: { uploadedModels: req.params.id } }
+// //     );
+
+// //     res.json({
+// //       success: true,
+// //       message: 'Model deleted successfully'
+// //     });
+
+// //   } catch (error) {
+// //     console.error('Delete model error:', error);
+// //     res.status(500).json({
+// //       success: false,
+// //       message: 'Internal server error',
+// //       error: process.env.NODE_ENV === 'development' ? error.message : undefined
+// //     });
+// //   }
+// // });
+
+// // // ADMIN ENDPOINTS
+
+// // // GET /api/models/admin/pending - Get all pending models (Admin)
+// // router.get('/admin/pending', async (req, res) => {
+// //   try {
+// //     const { page = 1, limit = 20 } = req.query;
+// //     const skip = (page - 1) * limit;
+
+// //     const models = await Model.find({ status: 'pending' })
+// //       .populate('uploadedBy', 'firstName lastName email')
+// //       .sort({ createdAt: -1 })
+// //       .skip(skip)
+// //       .limit(parseInt(limit));
+
+// //     const totalModels = await Model.countDocuments({ status: 'pending' });
+// //     const totalPages = Math.ceil(totalModels / limit);
+
+// //     res.json({
+// //       success: true,
+// //       data: {
+// //         models,
+// //         pagination: {
+// //           currentPage: parseInt(page),
+// //           totalPages,
+// //           totalModels,
+// //           hasNext: page < totalPages,
+// //           hasPrev: page > 1
+// //         }
+// //       }
+// //     });
+
+// //   } catch (error) {
+// //     console.error('Get pending models error:', error);
+// //     res.status(500).json({
+// //       success: false,
+// //       message: 'Internal server error',
+// //       error: process.env.NODE_ENV === 'development' ? error.message : undefined
+// //     });
+// //   }
+// // });
+
+// // // PUT /api/models/admin/:id/status - Update model status (Admin)
+// // router.put('/admin/:id/status', async (req, res) => {
+// //   try {
+// //     const { status, rejectionReason } = req.body;
+
+// //     if (!['pending', 'approved', 'rejected'].includes(status)) {
+// //       return res.status(400).json({
+// //         success: false,
+// //         message: 'Invalid status. Must be: pending, approved, or rejected'
+// //       });
+// //     }
+
+// //     if (status === 'rejected' && !rejectionReason) {
+// //       return res.status(400).json({
+// //         success: false,
+// //         message: 'Rejection reason is required when rejecting a model'
+// //       });
+// //     }
+
+// //     const model = await Model.findById(req.params.id)
+// //       .populate('uploadedBy', 'firstName lastName email');
+
+// //     if (!model) {
+// //       return res.status(404).json({
+// //         success: false,
+// //         message: 'Model not found'
+// //       });
+// //     }
+
+// //     model.status = status;
+// //     if (status === 'rejected') {
+// //       model.rejectionReason = rejectionReason;
+// //     } else {
+// //       model.rejectionReason = undefined;
+// //     }
+
+// //     await model.save();
+
+// //     res.json({
+// //       success: true,
+// //       message: `Model ${status} successfully`,
+// //       data: { model }
+// //     });
+
+// //   } catch (error) {
+// //     console.error('Update model status error:', error);
+// //     res.status(500).json({
+// //       success: false,
+// //       message: 'Internal server error',
+// //       error: process.env.NODE_ENV === 'development' ? error.message : undefined
+// //     });
+// //   }
+// // });
+
+// // // GET /api/models/admin/all - Get all models with any status (Admin)
+// // router.get('/admin/all', async (req, res) => {
+// //   try {
+// //     const { status, page = 1, limit = 20 } = req.query;
+// //     const skip = (page - 1) * limit;
+
+// //     const filter = {};
+// //     if (status && status !== 'all') {
+// //       filter.status = status;
+// //     }
+
+// //     const models = await Model.find(filter)
+// //       .populate('uploadedBy', 'firstName lastName email')
+// //       .sort({ createdAt: -1 })
+// //       .skip(skip)
+// //       .limit(parseInt(limit));
+
+// //     const totalModels = await Model.countDocuments(filter);
+// //     const totalPages = Math.ceil(totalModels / limit);
+
+// //     res.json({
+// //       success: true,
+// //       data: {
+// //         models,
+// //         pagination: {
+// //           currentPage: parseInt(page),
+// //           totalPages,
+// //           totalModels,
+// //           hasNext: page < totalPages,
+// //           hasPrev: page > 1
+// //         }
+// //       }
+// //     });
+
+// //   } catch (error) {
+// //     console.error('Get all models error:', error);
+// //     res.status(500).json({
+// //       success: false,
+// //       message: 'Internal server error',
+// //       error: process.env.NODE_ENV === 'development' ? error.message : undefined
+// //     });
+// //   }
+// // });
+
+// // // PUT /api/models/admin/:id/trending - Update trending/featured metadata (Admin)
+// // router.put('/admin/:id/trending', async (req, res) => {
+// //   try {
+// //     const { trendingScore, categoryTrendingScore, featured } = req.body;
+
+// //     const updates = {};
+
+// //     // Validate and collect updates
+// //     if (trendingScore !== undefined) {
+// //       if (typeof trendingScore !== 'number' || trendingScore < 0 || trendingScore > 100) {
+// //         return res.status(400).json({
+// //           success: false,
+// //           message: 'Trending score must be a number between 0 and 100'
+// //         });
+// //       }
+// //       updates.trendingScore = trendingScore;
+// //     }
+
+// //     if (categoryTrendingScore !== undefined) {
+// //       if (typeof categoryTrendingScore !== 'number' || categoryTrendingScore < 0 || categoryTrendingScore > 100) {
+// //         return res.status(400).json({
+// //           success: false,
+// //           message: 'Category trending score must be a number between 0 and 100'
+// //         });
+// //       }
+// //       updates.categoryTrendingScore = categoryTrendingScore;
+// //     }
+
+// //     if (featured !== undefined) {
+// //       if (typeof featured !== 'boolean') {
+// //         return res.status(400).json({
+// //           success: false,
+// //           message: 'Featured must be a boolean value'
+// //         });
+// //       }
+// //       updates.featured = featured;
+// //     }
+
+// //     if (Object.keys(updates).length === 0) {
+// //       return res.status(400).json({
+// //         success: false,
+// //         message: 'Provide at least one of trendingScore, categoryTrendingScore, or featured to update'
+// //       });
+// //     }
+
+// //     const model = await Model.findByIdAndUpdate(
+// //       req.params.id,
+// //       { $set: updates },
+// //       { new: true }
+// //     ).populate('uploadedBy', 'firstName lastName email');
+
+// //     if (!model) {
+// //       return res.status(404).json({
+// //         success: false,
+// //         message: 'Model not found'
+// //       });
+// //     }
+
+// //     res.json({
+// //       success: true,
+// //       message: 'Trending settings updated',
+// //       data: { model }
+// //     });
+// //   } catch (error) {
+// //     console.error('Update model trending error:', error);
+// //     res.status(500).json({
+// //       success: false,
+// //       message: 'Internal server error',
+// //       error: process.env.NODE_ENV === 'development' ? error.message : undefined
+// //     });
+// //   }
+// // });
+
+// // module.exports = router;
+
+
+
+
+
+// const express = require('express');
+// const Joi = require('joi');
+// const Model = require('../models/Model');
+// const User = require('../models/User');
+// const { authenticateToken } = require('../middleware/auth');
+
+// const router = express.Router();
+
+// // Validation schema
+// const modelSchema = Joi.object({
+//   name: Joi.string().trim().max(100).required(),
+//   shortDescription: Joi.string().trim().max(200).required(),
+//   longDescription: Joi.string().trim().max(2000).allow(''),
+//   category: Joi.string().required(),
+//   tags: Joi.array().items(Joi.string().max(30)).default([]),
+//   provider: Joi.string().trim().max(50).required(),
+//   pricing: Joi.string().valid('free', 'freemium', 'paid').default('freemium'),
+//   capabilities: Joi.array().items(Joi.string()).default([]),
+//   isApiAvailable: Joi.boolean().default(false),
+//   isOpenSource: Joi.boolean().default(false),
+//   modelType: Joi.string().allow(''),
+//   externalUrl: Joi.string().uri().allow(''),
+//   iconUrl: Joi.string().uri().allow(''), // URL from Firebase Storage
+//   bestFor: Joi.array().default([]),
+//   features: Joi.array().default([]),
+//   examplePrompts: Joi.array().default([]),
+//   screenshots: Joi.array().max(4).default([])
+// });
+
+// // POST /api/models - Upload a new AI model (Protected)
+// router.post('/', authenticateToken, async (req, res) => {
+//   try {
+//     // 1. Check Pro Status (req.user comes from MongoDB via middleware)
+//     if (!req.user.isProUser) {
+//       return res.status(403).json({
+//         success: false,
+//         message: 'Pro subscription required to upload models.'
+//       });
+//     }
+
+//     // 2. Validate Input
+//     const { error, value } = modelSchema.validate(req.body);
+//     if (error) {
+//       return res.status(400).json({
+//         success: false,
+//         message: error.details[0].message
+//       });
+//     }
+
+//     // 3. Check for duplicates for this user
+//     const existingModel = await Model.findOne({ 
+//       name: value.name,
+//       uploadedBy: req.user._id 
+//     });
+
+//     if (existingModel) {
+//       return res.status(400).json({
+//         success: false,
+//         message: 'You have already uploaded a model with this name'
+//       });
+//     }
+
+//     // 4. Create and Save to MongoDB
+//     const model = new Model({
+//       ...value,
+//       uploadedBy: req.user._id // MongoDB ObjectId
+//     });
+
+//     await model.save();
+
+//     // 5. Link model to User
+//     await User.findByIdAndUpdate(
+//       req.user._id,
+//       { $push: { uploadedModels: model._id } }
+//     );
+
+//     res.status(201).json({
+//       success: true,
+//       message: 'Model submitted successfully',
+//       data: {
+//         model: {
+//           id: model._id,
+//           name: model.name,
+//           slug: model.slug,
+//           status: model.status
+//         }
+//       }
+//     });
+
+//   } catch (error) {
+//     console.error('Model upload error:', error);
+//     res.status(500).json({
+//       success: false,
+//       message: 'Internal server error',
+//       error: process.env.NODE_ENV === 'development' ? error.message : undefined
+//     });
+//   }
+// });
+
+// // ... (Keep your existing GET, PUT, DELETE, and ADMIN routes as they were. 
+// // They are compatible because they use Mongoose Model and the updated auth middleware) ...
+
+// // Example: GET /api/models
+// router.get('/', async (req, res) => {
+//   try {
+//     const { category, search, page = 1, limit = 20 } = req.query;
+//     const skip = (page - 1) * limit;
+    
+//     const filter = { status: 'approved' };
+    
+//     if (category && category !== 'all') filter.category = category;
+//     if (search) {
+//       filter.$or = [
+//         { name: { $regex: search, $options: 'i' } },
+//         { shortDescription: { $regex: search, $options: 'i' } }
+//       ];
+//     }
+
+//     const models = await Model.find(filter)
+//       .populate('uploadedBy', 'firstName lastName')
+//       .sort({ featured: -1, trendingScore: -1, createdAt: -1 })
+//       .skip(skip)
+//       .limit(parseInt(limit));
+
+//     const total = await Model.countDocuments(filter);
+
+//     res.json({
+//       success: true,
+//       data: {
+//         models,
+//         pagination: {
+//           total,
+//           page: parseInt(page),
+//           pages: Math.ceil(total / limit)
+//         }
+//       }
+//     });
+//   } catch (error) {
+//     res.status(500).json({ success: false, message: error.message });
+//   }
+// });
+
+// module.exports = router;
+
+
+
+
+
+
+
 const express = require('express');
 const Joi = require('joi');
 const Model = require('../models/Model');
@@ -6,309 +975,152 @@ const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Validation schema for model upload
+// --- Validation Schemas ---
 const modelSchema = Joi.object({
-  name: Joi.string().trim().max(100).required().messages({
-    'string.empty': 'Model name is required',
-    'string.max': 'Model name cannot be more than 100 characters',
-    'any.required': 'Model name is required'
-  }),
-  shortDescription: Joi.string().trim().max(200).required().messages({
-    'string.empty': 'Short description is required',
-    'string.max': 'Short description cannot be more than 200 characters',
-    'any.required': 'Short description is required'
-  }),
-  longDescription: Joi.string().trim().max(2000).allow('').messages({
-    'string.max': 'Long description cannot be more than 2000 characters'
-  }),
-  category: Joi.string().valid(
-    'chatbots', 'image', 'code', 'productivity', 'voice', 
-    'writing', 'research', 'agents', 'video', 'audio', 
-    'data-analysis', 'language', 'design', 'automation', 
-    'healthcare', 'education', 'marketing', 'finance'
-  ).required().messages({
-    'any.only': 'Please select a valid category',
-    'any.required': 'Category is required'
-  }),
-  tags: Joi.array().items(
-    Joi.string().trim().max(30).messages({
-      'string.max': 'Each tag cannot be more than 30 characters'
-    })
-  ).default([]),
-  provider: Joi.string().trim().max(50).required().messages({
-    'string.empty': 'Provider is required',
-    'string.max': 'Provider name cannot be more than 50 characters',
-    'any.required': 'Provider is required'
-  }),
+  name: Joi.string().trim().max(100).required(),
+  shortDescription: Joi.string().trim().max(200).required(),
+  longDescription: Joi.string().trim().max(2000).allow(''),
+  category: Joi.string().required(),
+  tags: Joi.array().items(Joi.string().max(30)).default([]),
+  provider: Joi.string().trim().max(50).required(),
   pricing: Joi.string().valid('free', 'freemium', 'paid').default('freemium'),
-  capabilities: Joi.array().items(
-    Joi.string().valid('text', 'image', 'audio', 'video', 'code', 'agent')
-  ).default([]),
+  capabilities: Joi.array().items(Joi.string()).default([]),
   isApiAvailable: Joi.boolean().default(false),
   isOpenSource: Joi.boolean().default(false),
-  modelType: Joi.string().trim().max(50).allow('').messages({
-    'string.max': 'Model type cannot be more than 50 characters'
-  }),
-  externalUrl: Joi.string().uri().allow('').messages({
-    'string.uri': 'Please enter a valid URL'
-  }),
-  bestFor: Joi.array().items(
-    Joi.string().trim().max(50).messages({
-      'string.max': 'Each "best for" item cannot be more than 50 characters'
-    })
-  ).default([]),
-  features: Joi.array().items(
-    Joi.string().trim().max(100).messages({
-      'string.max': 'Each feature cannot be more than 100 characters'
-    })
-  ).default([]),
-  examplePrompts: Joi.array().items(
-    Joi.string().trim().max(200).messages({
-      'string.max': 'Each example prompt cannot be more than 200 characters'
-    })
-  ).default([]),
-  iconUrl: Joi.string().uri().allow('').messages({
-    'string.uri': 'Please enter a valid icon URL'
-  }),
-  screenshots: Joi.array().items(
-    Joi.string().uri().messages({
-      'string.uri': 'Please enter valid screenshot URLs'
-    })
-  ).max(4).default([]).messages({
-    'array.max': 'Maximum 4 screenshots allowed'
-  })
+  modelType: Joi.string().allow(''),
+  externalUrl: Joi.string().uri().allow(''),
+  iconUrl: Joi.string().uri().allow(''),
+  bestFor: Joi.array().default([]),
+  features: Joi.array().default([]),
+  examplePrompts: Joi.array().default([]),
+  screenshots: Joi.array().max(4).default([])
 });
 
-// POST /api/models - Upload a new AI model (Protected)
+// =================================================================
+// 1. ADMIN ROUTES (Must be defined BEFORE public routes)
+// =================================================================
+
+// GET /api/models/admin/all - Fetch models for Admin Dashboard
+router.get('/admin/all', authenticateToken, async (req, res) => {
+  try {
+    // In a real app, verify req.user.role === 'admin' here
+    const { status } = req.query;
+    const filter = {};
+    
+    // Filter logic: if 'status' is provided and not 'all', use it.
+    if (status && status !== 'all') {
+      filter.status = status;
+    }
+
+    const models = await Model.find(filter)
+      .populate('uploadedBy', 'firstName lastName email')
+      .sort({ createdAt: -1 });
+
+    res.json({ success: true, data: { models } });
+  } catch (error) {
+    console.error('Admin fetch error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// PUT /api/models/admin/:id/status - Approve/Reject Model
+router.put('/admin/:id/status', authenticateToken, async (req, res) => {
+  try {
+    const { status, rejectionReason } = req.body;
+    
+    const updateData = { status };
+    if (status === 'rejected') {
+      updateData.rejectionReason = rejectionReason;
+    } else if (status === 'approved') {
+      updateData.rejectionReason = ''; // Clear reason on approval
+    }
+
+    const model = await Model.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true }
+    ).populate('uploadedBy', 'firstName lastName');
+
+    res.json({ success: true, data: { model } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// PUT /api/models/admin/:id/trending - Update Scores/Featured Status
+router.put('/admin/:id/trending', authenticateToken, async (req, res) => {
+  try {
+    const { trendingScore, categoryTrendingScore, featured } = req.body;
+    
+    const updateData = {};
+    if (trendingScore !== undefined) updateData.trendingScore = trendingScore;
+    if (categoryTrendingScore !== undefined) updateData.categoryTrendingScore = categoryTrendingScore;
+    if (featured !== undefined) updateData.featured = featured;
+
+    const model = await Model.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true }
+    ).populate('uploadedBy', 'firstName lastName');
+
+    res.json({ success: true, data: { model } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// =================================================================
+// 2. PUBLIC / USER ROUTES
+// =================================================================
+
+// POST /api/models - Upload a new AI model (User Protected)
 router.post('/', authenticateToken, async (req, res) => {
   try {
-    // Check if user is a pro user
+    // 1. Check Pro Status
     if (!req.user.isProUser) {
-      return res.status(403).json({
-        success: false,
-        message: 'Pro subscription required to upload models. Please upgrade your subscription to continue.'
-      });
+      return res.status(403).json({ success: false, message: 'Pro subscription required to upload models.' });
     }
 
-    // Validate input data
+    // 2. Validate
     const { error, value } = modelSchema.validate(req.body);
-    if (error) {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation error',
-        errors: error.details.map(detail => detail.message)
-      });
-    }
+    if (error) return res.status(400).json({ success: false, message: error.details[0].message });
 
-    // Check if model with same name already exists for this user
-    const existingModel = await Model.findOne({ 
-      name: value.name,
-      uploadedBy: req.user._id 
-    });
+    // 3. Duplicate Check
+    const existingModel = await Model.findOne({ name: value.name, uploadedBy: req.user._id });
+    if (existingModel) return res.status(400).json({ success: false, message: 'You have already uploaded a model with this name' });
 
-    if (existingModel) {
-      return res.status(400).json({
-        success: false,
-        message: 'You have already uploaded a model with this name'
-      });
-    }
-
-    // Create new model
+    // 4. Save
     const model = new Model({
       ...value,
       uploadedBy: req.user._id
     });
-
     await model.save();
 
-    // Add model to user's uploadedModels array
-    await User.findByIdAndUpdate(
-      req.user._id,
-      { $push: { uploadedModels: model._id } }
-    );
+    // 5. Link to User
+    await User.findByIdAndUpdate(req.user._id, { $push: { uploadedModels: model._id } });
 
-    res.status(201).json({
-      success: true,
-      message: 'Model uploaded successfully and is pending review',
-      data: {
-        model: {
-          id: model._id,
-          name: model.name,
-          slug: model.slug,
-          shortDescription: model.shortDescription,
-          category: model.category,
-          provider: model.provider,
-          status: model.status,
-          createdAt: model.createdAt
-        }
-      }
-    });
+    res.status(201).json({ success: true, message: 'Model submitted successfully', data: { model } });
 
   } catch (error) {
     console.error('Model upload error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 });
 
-// POST /api/models/bulk - Bulk upload multiple AI models (Protected)
-// Accepts an array of model objects in the request body.
-router.post('/bulk', authenticateToken, async (req, res) => {
-  try {
-    // Only pro users may upload models
-    if (!req.user.isProUser) {
-      return res.status(403).json({
-        success: false,
-        message: 'Pro subscription required to upload models. Please upgrade your subscription to continue.'
-      });
-    }
-
-    // Validate that body is an array of models
-    const bulkSchema = Joi.array().items(modelSchema).min(1).max(50).messages({
-      'array.base': 'Request body must be an array of model objects',
-      'array.min': 'At least one model must be provided',
-      'array.max': 'Maximum 50 models allowed in a single bulk upload'
-    });
-
-    const { error, value } = bulkSchema.validate(req.body);
-    if (error) {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation error',
-        errors: error.details.map(detail => detail.message)
-      });
-    }
-
-    const modelsArray = value; // validated array
-
-    // Detect duplicate names inside the payload
-    const nameCounts = {};
-    modelsArray.forEach(m => {
-      const n = (m.name || '').trim();
-      nameCounts[n] = (nameCounts[n] || 0) + 1;
-    });
-
-    const duplicateInPayload = Object.entries(nameCounts)
-      .filter(([, cnt]) => cnt > 1)
-      .map(([name]) => name);
-
-    // Fetch existing models for this user that match any of the names
-    const names = modelsArray.map(m => m.name.trim());
-    const existing = await Model.find({ name: { $in: names }, uploadedBy: req.user._id }).select('name');
-    const existingNames = existing.map(e => e.name);
-
-    const errors = [];
-    const toCreate = [];
-
-    modelsArray.forEach((m, idx) => {
-      const name = m.name.trim();
-      if (duplicateInPayload.includes(name)) {
-        errors.push({ index: idx, name, message: 'Duplicate model name in payload' });
-        return;
-      }
-      if (existingNames.includes(name)) {
-        errors.push({ index: idx, name, message: 'You have already uploaded a model with this name' });
-        return;
-      }
-
-      toCreate.push({ ...m, uploadedBy: req.user._id });
-    });
-
-    let created = [];
-    if (toCreate.length > 0) {
-      // Insert many
-      const inserted = await Model.insertMany(toCreate);
-
-      // Update user's uploadedModels array with all new ids
-      await User.findByIdAndUpdate(req.user._id, { $push: { uploadedModels: { $each: inserted.map(i => i._id) } } });
-
-      created = inserted.map(model => ({
-        id: model._id,
-        name: model.name,
-        slug: model.slug,
-        shortDescription: model.shortDescription,
-        category: model.category,
-        provider: model.provider,
-        status: model.status,
-        createdAt: model.createdAt
-      }));
-    }
-
-    res.status(created.length > 0 ? 201 : 400).json({
-      success: created.length > 0,
-      message: created.length > 0 ? 'Bulk upload processed' : 'No models were created',
-      data: {
-        created,
-        errors
-      }
-    });
-
-  } catch (error) {
-    console.error('Bulk model upload error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
-});
-
-// GET /api/models/my-models - Get user's uploaded models (Protected)
-router.get('/my-models', authenticateToken, async (req, res) => {
-  try {
-    const models = await Model.find({ uploadedBy: req.user._id })
-      .sort({ createdAt: -1 })
-      .select('-uploadedBy');
-
-    res.json({
-      success: true,
-      data: {
-        models,
-        count: models.length
-      }
-    });
-
-  } catch (error) {
-    console.error('Get user models error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
-});
-
-// GET /api/models - Get all approved models (Public)
+// GET /api/models - Public Listing
 router.get('/', async (req, res) => {
   try {
-    const { category, pricing, page = 1, limit = 20, search, includePending } = req.query;
+    const { category, search, page = 1, limit = 20 } = req.query;
     const skip = (page - 1) * limit;
-
-    // Build filter object
-    const filter = {};
-    // If includePending is true, show both approved and pending models, otherwise only approved
-    if (includePending === 'true') {
-      filter.status = { $in: ['approved', 'pending'] };
-    } else {
-      filter.status = 'approved';
-    }
     
-    if (category && category !== 'all') {
-      filter.category = category;
-    }
+    // Default filter: Only show APPROVED models to the public
+    const filter = { status: 'approved' }; 
     
-    if (pricing && pricing !== 'all') {
-      filter.pricing = pricing;
-    }
-    
+    if (category && category !== 'all') filter.category = category;
     if (search) {
       filter.$or = [
         { name: { $regex: search, $options: 'i' } },
-        { shortDescription: { $regex: search, $options: 'i' } },
-        { tags: { $in: [new RegExp(search, 'i')] } }
+        { shortDescription: { $regex: search, $options: 'i' } }
       ];
     }
 
@@ -316,498 +1128,31 @@ router.get('/', async (req, res) => {
       .populate('uploadedBy', 'firstName lastName')
       .sort({ featured: -1, trendingScore: -1, createdAt: -1 })
       .skip(skip)
-      .limit(parseInt(limit))
-      .select('-rejectionReason');
+      .limit(parseInt(limit));
 
-    const totalModels = await Model.countDocuments(filter);
-    const totalPages = Math.ceil(totalModels / limit);
+    const total = await Model.countDocuments(filter);
 
     res.json({
       success: true,
       data: {
         models,
-        pagination: {
-          currentPage: parseInt(page),
-          totalPages,
-          totalModels,
-          hasNext: page < totalPages,
-          hasPrev: page > 1
-        }
+        pagination: { total, page: parseInt(page), pages: Math.ceil(total / limit) }
       }
     });
-
   } catch (error) {
-    console.error('Get models error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 
-// GET /api/models/search/suggestions - Quick search suggestions with name and icon (Public)
-// IMPORTANT: This route must be defined before /:id to avoid being matched as an ID
-router.get('/search/suggestions', async (req, res) => {
-  try {
-    const { q, limit = 8 } = req.query;
-    
-    if (!q || q.trim().length < 2) {
-      return res.json({
-        success: true,
-        data: { suggestions: [] }
-      });
-    }
-
-    const searchQuery = q.trim();
-    
-    // Build search filter for approved models
-    const filter = {
-      status: 'approved',
-      $or: [
-        { name: { $regex: searchQuery, $options: 'i' } },
-        { shortDescription: { $regex: searchQuery, $options: 'i' } },
-        { tags: { $in: [new RegExp(searchQuery, 'i')] } },
-        { category: { $regex: searchQuery, $options: 'i' } },
-        { provider: { $regex: searchQuery, $options: 'i' } }
-      ]
-    };
-
-    // Find models matching the search, only select necessary fields for performance
-    const models = await Model.find(filter)
-      .select('_id name slug iconUrl shortDescription category provider pricing')
-      .sort({ trendingScore: -1, featured: -1, createdAt: -1 })
-      .limit(parseInt(limit));
-
-    const suggestions = models.map(model => ({
-      id: model._id,
-      name: model.name,
-      slug: model.slug,
-      iconUrl: model.iconUrl || null,
-      shortDescription: model.shortDescription,
-      category: model.category,
-      provider: model.provider,
-      pricing: model.pricing
-    }));
-
-    res.json({
-      success: true,
-      data: { 
-        suggestions,
-        query: searchQuery
-      }
-    });
-
-  } catch (error) {
-    console.error('Search suggestions error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
-});
-
-// GET /api/models/:id - Get a specific model by ID (Public)
+// GET /api/models/:id - Get Single Model Details
 router.get('/:id', async (req, res) => {
   try {
-    const { id } = req.params;
+    const model = await Model.findById(req.params.id).populate('uploadedBy', 'firstName lastName');
+    if (!model) return res.status(404).json({ success: false, message: 'Model not found' });
     
-    // Check if the id is a valid ObjectId
-    const mongoose = require('mongoose');
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid model ID format'
-      });
-    }
-
-    const model = await Model.findOne({
-      _id: id,
-      status: 'approved'
-    }).populate('uploadedBy', 'firstName lastName');
-
-    if (!model) {
-      return res.status(404).json({
-        success: false,
-        message: 'Model not found'
-      });
-    }
-
-    res.json({
-      success: true,
-      data: { model }
-    });
-
+    res.json({ success: true, data: { model } });
   } catch (error) {
-    console.error('Get model error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
-});
-
-// POST /api/models/:id/click - Record a click/view for a model (Protected - dedupes per authenticated user)
-router.post('/:id/click', authenticateToken, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const mongoose = require('mongoose');
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ success: false, message: 'Invalid model ID format' });
-    }
-
-    const model = await Model.findById(id);
-    if (!model) {
-      return res.status(404).json({ success: false, message: 'Model not found' });
-    }
-
-    // If the user already clicked, don't increment again
-    const userIdStr = req.user._id.toString();
-    const alreadyClicked = (model.clicksBy || []).some(id => id.toString() === userIdStr);
-    if (alreadyClicked) {
-      return res.json({ success: true, message: 'Already recorded', data: { clicks: model.clicks } });
-    }
-
-    model.clicks = (model.clicks || 0) + 1;
-    model.clicksBy = model.clicksBy || [];
-    model.clicksBy.push(req.user._id);
-
-    await model.save();
-
-    return res.json({ success: true, message: 'Click recorded', data: { clicks: model.clicks } });
-  } catch (error) {
-    console.error('Record click error:', error);
-    return res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-});
-
-// POST /api/models/:id/click/anon - Record a click for anonymous user (no server-side dedupe)
-router.post('/:id/click/anon', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const mongoose = require('mongoose');
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ success: false, message: 'Invalid model ID format' });
-    }
-
-    const model = await Model.findById(id);
-    if (!model) {
-      return res.status(404).json({ success: false, message: 'Model not found' });
-    }
-
-    model.clicks = (model.clicks || 0) + 1;
-    await model.save();
-
-    return res.json({ success: true, message: 'Anonymous click recorded', data: { clicks: model.clicks } });
-  } catch (error) {
-    console.error('Record anonymous click error:', error);
-    return res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-});
-
-// PUT /api/models/:id - Update a model (Protected - only owner)
-router.put('/:id', authenticateToken, async (req, res) => {
-  try {
-    // Find model by ID and check ownership
-    const model = await Model.findOne({
-      _id: req.params.id,
-      uploadedBy: req.user._id
-    });
-
-    if (!model) {
-      return res.status(404).json({
-        success: false,
-        message: 'Model not found or you do not have permission to edit it'
-      });
-    }
-
-    // Allow editing models in any status, but reset approved models to pending
-    const wasApproved = model.status === 'approved';
-
-    // Validate update data
-    const { error, value } = modelSchema.validate(req.body);
-    if (error) {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation error',
-        errors: error.details.map(detail => detail.message)
-      });
-    }
-
-    // Update model
-    Object.assign(model, value);
-    if (model.status === 'rejected' || wasApproved) {
-      model.status = 'pending'; // Reset to pending when updating a rejected or approved model
-      model.rejectionReason = undefined;
-    }
-
-    await model.save();
-
-    res.json({
-      success: true,
-      message: 'Model updated successfully',
-      data: { model }
-    });
-
-  } catch (error) {
-    console.error('Update model error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
-});
-
-// DELETE /api/models/:id - Delete a model (Protected - only owner)
-router.delete('/:id', authenticateToken, async (req, res) => {
-  try {
-    const model = await Model.findOne({
-      _id: req.params.id,
-      uploadedBy: req.user._id
-    });
-
-    if (!model) {
-      return res.status(404).json({
-        success: false,
-        message: 'Model not found or you do not have permission to delete it'
-      });
-    }
-
-    await Model.findByIdAndDelete(req.params.id);
-
-    // Remove model from user's uploadedModels array
-    await User.findByIdAndUpdate(
-      req.user._id,
-      { $pull: { uploadedModels: req.params.id } }
-    );
-
-    res.json({
-      success: true,
-      message: 'Model deleted successfully'
-    });
-
-  } catch (error) {
-    console.error('Delete model error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
-});
-
-// ADMIN ENDPOINTS
-
-// GET /api/models/admin/pending - Get all pending models (Admin)
-router.get('/admin/pending', async (req, res) => {
-  try {
-    const { page = 1, limit = 20 } = req.query;
-    const skip = (page - 1) * limit;
-
-    const models = await Model.find({ status: 'pending' })
-      .populate('uploadedBy', 'firstName lastName email')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(parseInt(limit));
-
-    const totalModels = await Model.countDocuments({ status: 'pending' });
-    const totalPages = Math.ceil(totalModels / limit);
-
-    res.json({
-      success: true,
-      data: {
-        models,
-        pagination: {
-          currentPage: parseInt(page),
-          totalPages,
-          totalModels,
-          hasNext: page < totalPages,
-          hasPrev: page > 1
-        }
-      }
-    });
-
-  } catch (error) {
-    console.error('Get pending models error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
-});
-
-// PUT /api/models/admin/:id/status - Update model status (Admin)
-router.put('/admin/:id/status', async (req, res) => {
-  try {
-    const { status, rejectionReason } = req.body;
-
-    if (!['pending', 'approved', 'rejected'].includes(status)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid status. Must be: pending, approved, or rejected'
-      });
-    }
-
-    if (status === 'rejected' && !rejectionReason) {
-      return res.status(400).json({
-        success: false,
-        message: 'Rejection reason is required when rejecting a model'
-      });
-    }
-
-    const model = await Model.findById(req.params.id)
-      .populate('uploadedBy', 'firstName lastName email');
-
-    if (!model) {
-      return res.status(404).json({
-        success: false,
-        message: 'Model not found'
-      });
-    }
-
-    model.status = status;
-    if (status === 'rejected') {
-      model.rejectionReason = rejectionReason;
-    } else {
-      model.rejectionReason = undefined;
-    }
-
-    await model.save();
-
-    res.json({
-      success: true,
-      message: `Model ${status} successfully`,
-      data: { model }
-    });
-
-  } catch (error) {
-    console.error('Update model status error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
-});
-
-// GET /api/models/admin/all - Get all models with any status (Admin)
-router.get('/admin/all', async (req, res) => {
-  try {
-    const { status, page = 1, limit = 20 } = req.query;
-    const skip = (page - 1) * limit;
-
-    const filter = {};
-    if (status && status !== 'all') {
-      filter.status = status;
-    }
-
-    const models = await Model.find(filter)
-      .populate('uploadedBy', 'firstName lastName email')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(parseInt(limit));
-
-    const totalModels = await Model.countDocuments(filter);
-    const totalPages = Math.ceil(totalModels / limit);
-
-    res.json({
-      success: true,
-      data: {
-        models,
-        pagination: {
-          currentPage: parseInt(page),
-          totalPages,
-          totalModels,
-          hasNext: page < totalPages,
-          hasPrev: page > 1
-        }
-      }
-    });
-
-  } catch (error) {
-    console.error('Get all models error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
-});
-
-// PUT /api/models/admin/:id/trending - Update trending/featured metadata (Admin)
-router.put('/admin/:id/trending', async (req, res) => {
-  try {
-    const { trendingScore, categoryTrendingScore, featured } = req.body;
-
-    const updates = {};
-
-    // Validate and collect updates
-    if (trendingScore !== undefined) {
-      if (typeof trendingScore !== 'number' || trendingScore < 0 || trendingScore > 100) {
-        return res.status(400).json({
-          success: false,
-          message: 'Trending score must be a number between 0 and 100'
-        });
-      }
-      updates.trendingScore = trendingScore;
-    }
-
-    if (categoryTrendingScore !== undefined) {
-      if (typeof categoryTrendingScore !== 'number' || categoryTrendingScore < 0 || categoryTrendingScore > 100) {
-        return res.status(400).json({
-          success: false,
-          message: 'Category trending score must be a number between 0 and 100'
-        });
-      }
-      updates.categoryTrendingScore = categoryTrendingScore;
-    }
-
-    if (featured !== undefined) {
-      if (typeof featured !== 'boolean') {
-        return res.status(400).json({
-          success: false,
-          message: 'Featured must be a boolean value'
-        });
-      }
-      updates.featured = featured;
-    }
-
-    if (Object.keys(updates).length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Provide at least one of trendingScore, categoryTrendingScore, or featured to update'
-      });
-    }
-
-    const model = await Model.findByIdAndUpdate(
-      req.params.id,
-      { $set: updates },
-      { new: true }
-    ).populate('uploadedBy', 'firstName lastName email');
-
-    if (!model) {
-      return res.status(404).json({
-        success: false,
-        message: 'Model not found'
-      });
-    }
-
-    res.json({
-      success: true,
-      message: 'Trending settings updated',
-      data: { model }
-    });
-  } catch (error) {
-    console.error('Update model trending error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 
