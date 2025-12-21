@@ -1,210 +1,152 @@
 const express = require('express');
 const router = express.Router();
 const Razorpay = require('razorpay');
+const crypto = require('crypto');
 const User = require('../models/User');
+const Model = require('../models/Model');
 const { authenticateToken } = require('../middleware/auth');
+require('dotenv').config();
 
 const key_id = process.env.RAZORPAY_KEY_ID;
 const key_secret = process.env.RAZORPAY_KEY_SECRET;
 
-// Only initialize Razorpay if keys are provided
-let razorpay = null;
-if (key_id && key_secret) {
-  razorpay = new Razorpay({ key_id, key_secret });
-  console.log('Razorpay initialized successfully');
-} else {
-  console.warn('Razorpay not initialized: RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET are required');
-}
+const razorpay = new Razorpay({ key_id, key_secret });
 
-// Simple mapping of planId -> amount (in paise). Adjust amounts as needed.
-// NOTE: frontend plans should pass `apiPlanId` values such as 'monthly', 'six_months', 'annual', etc.
+// --- CONFIGURATION: Subscription Plans ---
 const planAmountMap = {
   free: 0,
-  // Pro (monthly = ₹49, 6 months = ₹149)
-  monthly: 49 * 100, // ₹49.00
-  six_months: 149 * 100, // ₹149.00
-  // Annual/Enterprise
-  annual: 249 * 100, // ₹249.00
-  // Backward compatibility: keep 'pro' and 'enterprise' mapping
-  pro: 49 * 100, // legacy 'pro' -> monthly price ; adjust if you want different conversion
-  enterprise: 249 * 100 // legacy enterprise -> annual price
+  monthly: 49 * 100,      // ₹49
+  six_months: 149 * 100,  // ₹149
+  annual: 249 * 100,      // ₹249
+  pro: 49 * 100,          // Legacy support
+  enterprise: 249 * 100   // Legacy support
 };
 
-// Diagnostic route (GET /api/payments) to verify mounting
-router.get('/', (req, res) => {
-  return res.json({ success: true, message: 'Payments routes are mounted and working' });
-});
+// ==========================================
+// 1. SUBSCRIPTION FLOW (Pricing Page)
+// ==========================================
 
-// Simple request logger for payments router (POST/GET)
-router.use((req, res, next) => {
-  console.log(`[Payments Router] ${req.method} ${req.path}`);
-  next();
-});
-
-// Create an order for a selected plan
-router.post('/create-order', async (req, res) => {
+// Create Order for Subscription
+router.post('/create-order', authenticateToken, async (req, res) => {
   try {
-    const { planId } = req.body || {};
-    // be defensive: allow planId as string; fallback to 'pro'
+    const { planId } = req.body;
     const amount = planAmountMap[planId] ?? planAmountMap.pro;
 
-    if (amount === undefined) {
-      return res.status(400).json({ success: false, message: 'Invalid plan selected' });
-    }
-    if (!amount || amount <= 0) {
-      return res.status(400).json({ success: false, message: 'Invalid or free plan selected' });
-    }
+    if (!amount) return res.status(400).json({ success: false, message: 'Invalid plan' });
 
     const options = {
-      amount, // amount in paise
+      amount,
       currency: 'INR',
-      receipt: `receipt_${Date.now()}`,
+      receipt: `sub_${Date.now()}`,
       payment_capture: 1
     };
 
-    if (!razorpay) {
-      return res.status(503).json({ success: false, message: 'Payment service not configured. Missing Razorpay credentials.' });
-    }
-
-    console.log('Creating Razorpay order', { planId, amount });
     const order = await razorpay.orders.create(options);
+    res.json({ success: true, order, key_id });
 
-    return res.json({ success: true, order, key_id });
   } catch (err) {
-    console.error('Error creating Razorpay order:', err);
-    return res.status(500).json({ success: false, message: 'Failed to create order', error: err.message });
+    console.error('Subscription Order Error:', err);
+    res.status(500).json({ success: false, message: 'Failed to create subscription order' });
   }
 });
 
-// Complete subscription after successful payment
+// Complete/Verify Subscription
 router.post('/complete-subscription', authenticateToken, async (req, res) => {
   try {
     const { planId, razorpay_payment_id, razorpay_order_id, razorpay_signature } = req.body;
-    const amount = planAmountMap[planId] ?? planAmountMap.pro;
-    const userId = req.user.id;
+    const userId = req.user._id; // Ensure this matches your auth middleware (req.user.id or req.user._id)
 
-    // Find the user
+    // 1. Verify Signature
+    const body = razorpay_order_id + "|" + razorpay_payment_id;
+    const expectedSignature = crypto
+      .createHmac('sha256', key_secret)
+      .update(body.toString())
+      .digest('hex');
+
+    if (expectedSignature !== razorpay_signature) {
+      return res.status(400).json({ success: false, message: 'Invalid Payment Signature' });
+    }
+
+    // 2. Update User
     const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
-    }
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
-    // For demo purposes, we'll skip Razorpay signature verification
-    // In production, you should verify the signature before updating user subscription
-    
-    // Map planId to subscription details
-    let subscriptionType = 'free';
-    let isProUser = false;
-    
-    // Map planId to subscription details. Accept both granular plan ids (monthly, six_months, annual)
-    // and legacy ones (pro, enterprise) for backward compatibility.
-    switch (planId) {
-      case 'monthly':
-      case 'six_months':
-      case 'pro':
-        subscriptionType = 'pro';
-        isProUser = true;
-        break;
-      case 'annual':
-      case 'enterprise':
-        subscriptionType = 'enterprise';
-        isProUser = true;
-        break;
-      default:
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid plan selected'
-        });
-    }
+    let end = new Date();
+    if (planId === 'monthly') end.setMonth(end.getMonth() + 1);
+    else if (planId === 'six_months') end.setMonth(end.getMonth() + 6);
+    else if (planId === 'annual') end.setFullYear(end.getFullYear() + 1);
+    else end.setMonth(end.getMonth() + 1); // Default
 
-    // Validate the order amount matches the expected plan amount to avoid tampering
-    if (!razorpay) {
-      return res.status(503).json({ success: false, message: 'Payment service not configured. Missing Razorpay credentials.' });
-    }
-
-    try {
-      const fetchedOrder = await razorpay.orders.fetch(razorpay_order_id);
-      if (!fetchedOrder || !fetchedOrder.amount) {
-        return res.status(400).json({ success: false, message: 'Unable to fetch razorpay order for validation' });
-      }
-
-      if (parseInt(fetchedOrder.amount, 10) !== amount) {
-        console.error(`Order amount mismatch: expected ${amount} but got ${fetchedOrder.amount} for order ${razorpay_order_id}`);
-        return res.status(400).json({ success: false, message: 'Payment amount does not match the selected plan' });
-      }
-    } catch (err) {
-      console.error('Error fetching order for validation:', err);
-      return res.status(500).json({ success: false, message: 'Failed to validate payment order' });
-    }
-
-    // Update user subscription
-    user.subscriptionType = subscriptionType;
-    user.isProUser = isProUser;
+    user.subscriptionType = 'pro';
+    user.isProUser = true;
     user.subscriptionStatus = 'active';
     user.subscriptionStartDate = new Date();
-    user.subscriptionPlanId = planId;
-
-    // Calculate subscription end date based on plan
-    const start = new Date();
-    let end = null;
-    switch (planId) {
-      case 'monthly':
-        end = new Date(start);
-        end.setMonth(end.getMonth() + 1);
-        break;
-      case 'six_months':
-        end = new Date(start);
-        end.setMonth(end.getMonth() + 6);
-        break;
-      case 'annual':
-        end = new Date(start);
-        end.setFullYear(end.getFullYear() + 1);
-        break;
-      case 'pro':
-        end = new Date(start);
-        end.setMonth(end.getMonth() + 1);
-        break;
-      case 'enterprise':
-        end = new Date(start);
-        end.setFullYear(end.getFullYear() + 1);
-        break;
-      default:
-        end = null;
-    }
-
     user.subscriptionEndDate = end;
+    user.subscriptionPlanId = planId;
 
     await user.save();
 
-    res.status(200).json({
-      success: true,
-      message: `Successfully subscribed to ${subscriptionType} plan!`,
-      data: {
-        user: {
-          id: user._id,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          email: user.email,
-          subscriptionType: user.subscriptionType,
-          isProUser: user.isProUser,
-          subscriptionStatus: user.subscriptionStatus,
-          subscriptionStartDate: user.subscriptionStartDate,
-          subscriptionEndDate: user.subscriptionEndDate,
-          subscriptionPlanId: user.subscriptionPlanId
-        }
-      }
-    });
+    res.json({ success: true, message: 'Subscription active!', data: { user } });
 
   } catch (error) {
-    console.error('Complete subscription error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
+    console.error('Subscription Verification Error:', error);
+    res.status(500).json({ success: false, message: 'Payment verification failed' });
+  }
+});
+
+// ==========================================
+// 2. PROMOTION FLOW (Get Featured Page)
+// ==========================================
+
+// Create Order for Featured Tool Promotion
+router.post('/create-promotion-order', authenticateToken, async (req, res) => {
+  try {
+    const amount = 2999 * 100; // ₹2999
+    const options = {
+      amount,
+      currency: 'INR',
+      receipt: `promo_${Date.now()}`,
+      payment_capture: 1
+    };
+
+    const order = await razorpay.orders.create(options);
+    res.json({ success: true, order, key_id });
+
+  } catch (err) {
+    console.error('Promo Order Error:', err);
+    res.status(500).json({ success: false, message: 'Failed to create promotion order' });
+  }
+});
+
+// Verify Promotion Payment
+router.post('/verify-promotion', authenticateToken, async (req, res) => {
+  try {
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, modelId } = req.body;
+
+    const body = razorpay_order_id + "|" + razorpay_payment_id;
+    const expectedSignature = crypto
+      .createHmac('sha256', key_secret)
+      .update(body.toString())
+      .digest('hex');
+
+    if (expectedSignature !== razorpay_signature) {
+      return res.status(400).json({ success: false, message: 'Invalid Payment Signature' });
+    }
+
+    const model = await Model.findOne({ _id: modelId, uploadedBy: req.user._id });
+    if (!model) return res.status(404).json({ success: false, message: 'Model not found' });
+
+    model.featured = true;
+    model.trendingScore = (model.trendingScore || 0) + 100;
+    model.categoryTrendingScore = (model.categoryTrendingScore || 0) + 100;
+    
+    await model.save();
+
+    res.json({ success: true, message: 'Tool Featured Successfully!', data: { model } });
+
+  } catch (error) {
+    console.error('Promo Verification Error:', error);
+    res.status(500).json({ success: false, message: 'Internal Server Error' });
   }
 });
 

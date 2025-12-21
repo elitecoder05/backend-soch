@@ -22,4 +22,22 @@ const verifyFirebaseIdToken = async (req, res, next) => {
   }
 };
 
-module.exports = { verifyFirebaseIdToken };
+const verifyFirebaseIdTokenManual = async (token) => {
+  try {
+    
+    const idToken = token
+
+    if (!idToken) {
+      return {success:false,data:null}
+    }
+
+    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    return {success:true,data:decodedToken}
+   
+  } catch (err) {
+    console.error('Firebase auth verifyIdToken error:', err);
+    return {success:false,data:null}
+  }
+};
+
+module.exports = { verifyFirebaseIdToken,verifyFirebaseIdTokenManual };

@@ -31,7 +31,9 @@ const modelSchema = new mongoose.Schema({
       'chatbots', 'image', 'code', 'productivity', 'voice', 
       'writing', 'research', 'agents', 'video', 'audio', 
       'data-analysis', 'language', 'design', 'automation', 
-      'healthcare', 'education', 'marketing', 'finance'
+      'healthcare', 'education', 'marketing', 'finance',
+      'games', 'logo-creation', 'legal-assistant', 'deepfake', 
+      'developer-tools', 'summarizer', 'text-to-video'
     ]
   },
   tags: [{
@@ -101,10 +103,21 @@ const modelSchema = new mongoose.Schema({
     type: String,
     trim: true
   }],
+  
+  // --- PROMOTION FIELDS ---
   featured: {
     type: Boolean,
     default: false
   },
+  isSponsored: {  // ✅ New Field
+    type: Boolean,
+    default: false
+  },
+  hasCustomCampaign: { // ✅ New Field
+    type: Boolean,
+    default: false
+  },
+  
   trendingScore: {
     type: Number,
     default: 0,
@@ -145,8 +158,7 @@ const modelSchema = new mongoose.Schema({
   rejectionReason: {
     type: String,
     trim: true
-  }
-  ,
+  },
   clicks: {
     type: Number,
     default: 0,
@@ -196,5 +208,8 @@ modelSchema.index({ category: 1, status: 1 });
 modelSchema.index({ uploadedBy: 1 });
 modelSchema.index({ featured: -1, trendingScore: -1 });
 modelSchema.index({ categoryTrendingScore: -1, category: 1 });
+// Index for promotions
+modelSchema.index({ isSponsored: -1 });
+modelSchema.index({ hasCustomCampaign: -1 });
 
 module.exports = mongoose.model('Model', modelSchema);
