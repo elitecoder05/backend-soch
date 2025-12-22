@@ -13,6 +13,7 @@ const contactRoutes = require('./routes/contact'); // ✅ Ensure this file exist
 const modelRoutes = require('./routes/models');
 const authRoutes = require('./routes/auth');
 const paymentRoutes = require('./routes/payments');
+const categoryRoutes = require('./routes/categories');
 
 const app = express();
 const PORT = process.env.PORT || 1000;
@@ -56,6 +57,7 @@ app.use('/api/models', modelRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/contact', contactRoutes); // ✅ Connects to routes/contact.js
 app.use('/api/payments', paymentRoutes);
+app.use('/api/categories', categoryRoutes);
 
 // Start Server
 app.listen(PORT, () => {
