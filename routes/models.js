@@ -28,10 +28,6 @@ const modelSchema = Joi.object({
   screenshots: Joi.array().max(4).default([])
 });
 
-// =================================================================
-// 1. ADMIN ROUTES (Must be defined BEFORE public routes)
-// =================================================================
-
 // GET /api/models/admin/all - Fetch models for Admin Dashboard
 router.get('/admin/all', authenticateToken, async (req, res) => {
   try {
@@ -79,43 +75,6 @@ router.put('/admin/:id/status', authenticateToken, async (req, res) => {
   }
 });
 
-// PUT /api/models/admin/:id/trending - Update Scores/Featured/Promotions
-// ✅ CRITICAL UPDATE: Added isSponsored and hasCustomCampaign handling
-// router.put('/admin/:id/trending', authenticateToken, async (req, res) => {
-//   try {
-//     const { 
-//       trendingScore, 
-//       categoryTrendingScore, 
-//       featured, 
-//       isSponsored,        // <--- NEW
-//       hasCustomCampaign   // <--- NEW
-//     } = req.body;
-    
-//     const updateData = {};
-//     // Only update fields that are actually sent in the request
-//     if (trendingScore !== undefined) updateData.trendingScore = trendingScore;
-//     if (categoryTrendingScore !== undefined) updateData.categoryTrendingScore = categoryTrendingScore;
-//     if (featured !== undefined) updateData.featured = featured;
-//     if (isSponsored !== undefined) updateData.isSponsored = isSponsored;             // <--- NEW
-//     if (hasCustomCampaign !== undefined) updateData.hasCustomCampaign = hasCustomCampaign; // <--- NEW
-
-//     const model = await Model.findByIdAndUpdate(
-//       req.params.id,
-//       { $set: updateData }, // Use $set to explicitly update fields
-//       { new: true }
-//     ).populate('uploadedBy', 'firstName lastName');
-
-//     if (!model) {
-//       return res.status(404).json({ success: false, message: 'Model not found' });
-//     }
-
-//     res.json({ success: true, data: { model } });
-//   } catch (error) {
-//     console.error("Update Trending Error:", error);
-//     res.status(500).json({ success: false, message: error.message });
-//   }
-// });
-// PUT /api/models/admin/:id/trending
 router.put('/admin/:id/trending', authenticateToken, async (req, res) => {
   try {
     console.log("🔵 BACKEND: Received Trending Update Request");
@@ -166,9 +125,6 @@ router.put('/admin/:id/trending', authenticateToken, async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 });
-// =================================================================
-// 2. USER SPECIFIC ROUTES (The Missing Part)
-// =================================================================
 
 // GET /api/models/my-models - Fetch logged-in user's models
 // ⚠️ CRITICAL: This MUST be defined BEFORE router.get('/:id')
@@ -183,10 +139,6 @@ router.get('/my-models', authenticateToken, async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 });
-
-// =================================================================
-// 3. PUBLIC / USER ROUTES
-// =================================================================
 
 // POST /api/models - Upload a new AI model (User Protected)
 router.post('/', authenticateToken, async (req, res) => {
@@ -260,16 +212,19 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /api/models/:id - Get Single Model Details
 router.get('/:id', async (req, res) => {
   try {
     const model = await Model.findById(req.params.id).populate('uploadedBy', 'firstName lastName');
     if (!model) return res.status(404).json({ success: false, message: 'Model not found' });
-    
-    // Increment View Count (Optional but good for analytics)
-    model.clicks = (model.clicks || 0) + 1;
-    await model.save();
 
+    // 🛡️ SECURITY: If tool is NOT approved, block everyone except Admins
+    if (model.status !== 'approved') {
+       // Note: authenticateToken must be applied for req.user to exist
+       if (!req.user || req.user.role !== 'admin') {
+         return res.status(403).json({ success: false, message: 'This tool is currently unavailable.' });
+       }
+    }
+    
     res.json({ success: true, data: { model } });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
