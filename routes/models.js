@@ -264,4 +264,55 @@ router.post('/:id/promote', authenticateToken, async (req, res) => {
   }
 });
 
+
+// DELETE /api/models/:id - Delete a model
+router.delete('/:id', authenticateToken, async (req, res) => {
+  try {
+    const modelId = req.params.id;
+    const userId = req.user._id;
+
+    // 1. Find the model
+    const model = await Model.findById(modelId);
+    
+    if (!model) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Model not found' 
+      });
+    }
+
+    // 2. Security Check: Ensure the user deleting it OWNS the model (or is Admin)
+    // We compare strings because ObjectIds might behave differently
+    if (model.uploadedBy.toString() !== userId && req.user.role !== 'admin') {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'You are not authorized to delete this model.' 
+      });
+    }
+
+    // 3. Delete from Model collection
+    await Model.findByIdAndDelete(modelId);
+
+    // 4. (Optional but recommended) Remove reference from User collection
+    await User.findByIdAndUpdate(userId, { 
+      $pull: { uploadedModels: modelId } 
+    });
+
+    console.log(`🗑️ Model deleted: ${model.name} by user ${userId}`);
+
+    res.json({ 
+      success: true, 
+      message: 'Model deleted successfully' 
+    });
+
+  } catch (error) {
+    console.error('Delete Model Error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
+  }
+});
+
+
 module.exports = router;
