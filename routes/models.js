@@ -222,6 +222,45 @@ router.post('/', authenticateToken, async (req, res) => {
   }
 });
 
+// PUT /api/models/:id - Update an Existing Model (User must own it)
+router.put('/:id', authenticateToken, async (req, res) => {
+  try {
+    // 1. Validate Input
+    const { error, value } = modelSchema.validate(req.body);
+    if (error) return res.status(400).json({ success: false, message: error.details[0].message });
+
+    // 2. Find the model and verify ownership
+    const model = await Model.findOne({ _id: req.params.id, uploadedBy: req.user._id });
+    if (!model) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Model not found or you do not have permission to edit this model' 
+      });
+    }
+
+    // 3. Update the model fields
+    Object.assign(model, value);
+    
+    // 4. Reset status to pending if it was previously approved/rejected
+    if (model.status === 'approved' || model.status === 'rejected') {
+      model.status = 'pending';
+      model.rejectionReason = '';
+    }
+
+    await model.save();
+
+    res.json({ 
+      success: true, 
+      message: 'Model updated successfully. It will be reviewed again.', 
+      data: { model } 
+    });
+
+  } catch (error) {
+    console.error('Model update error:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
 // GET /api/models - Public Listing
 router.get('/', async (req, res) => {
   try {
@@ -257,6 +296,38 @@ router.get('/', async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// DELETE /api/models/:id - Delete a Model (User must own it)
+router.delete('/:id', authenticateToken, async (req, res) => {
+  try {
+    // 1. Find the model and verify ownership
+    const model = await Model.findOne({ _id: req.params.id, uploadedBy: req.user._id });
+    
+    if (!model) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Model not found or you do not have permission to delete this model' 
+      });
+    }
+
+    // 2. Delete the model
+    await Model.findByIdAndDelete(req.params.id);
+
+    // 3. Remove from user's uploadedModels array
+    await User.findByIdAndUpdate(req.user._id, { 
+      $pull: { uploadedModels: req.params.id } 
+    });
+
+    res.json({ 
+      success: true, 
+      message: 'Model deleted successfully' 
+    });
+
+  } catch (error) {
+    console.error('Model delete error:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 });
 
