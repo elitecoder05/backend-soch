@@ -201,22 +201,36 @@ const allowedOrigins = [
   process.env.FRONTEND_URL          // Env Variable Fallback
 ].filter(Boolean);
 
+// Log allowed origins on startup for debugging
+console.log('🔒 [CORS] Allowed origins:', allowedOrigins);
+
 const corsOptions = {
   origin: function (origin, callback) {
     // 1. Allow requests with no origin (like mobile apps, Postman, server-to-server)
-    if (!origin) return callback(null, true);
+    if (!origin) {
+      console.log('✅ [CORS] Allowed: No origin (mobile/Postman)');
+      return callback(null, true);
+    }
 
     // 2. Check if the origin matches our allowed list exactly
     if (allowedOrigins.indexOf(origin) !== -1) {
+      console.log('✅ [CORS] Allowed: Exact match -', origin);
       return callback(null, true);
     }
     
     // 3. Dynamic Subdomain Check (Safety for preview branches)
-    if (origin.endsWith('.sochai.store') || origin.endsWith('.up.railway.app')) {
+    if (origin.endsWith('.sochai.store') || origin.endsWith('.up.railway.app') || origin.endsWith('.vercel.app')) {
+      console.log('✅ [CORS] Allowed: Wildcard subdomain -', origin);
       return callback(null, true);
     }
 
-    console.log('[CORS Blocked]:', origin);
+    // 4. Allow localhost for development
+    if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+      console.log('✅ [CORS] Allowed: Localhost -', origin);
+      return callback(null, true);
+    }
+
+    console.log('❌ [CORS] BLOCKED:', origin);
     return callback(new Error('Not allowed by CORS'));
   },
   credentials: true, // <--- REQUIRED for cookies/auth to work
