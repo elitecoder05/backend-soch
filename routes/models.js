@@ -216,7 +216,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
 // GET /api/models - Public Listing
 router.get('/', async (req, res) => {
   try {
-    const { category, search, page = 1, limit = 20 } = req.query;
+    const { category, search, page = 1, limit = 20, randomize } = req.query;
     const skip = (page - 1) * limit;
     
     // Default filter: Only show APPROVED models to the public
@@ -230,12 +230,42 @@ router.get('/', async (req, res) => {
       ];
     }
 
-    const models = await Model.find(filter)
-      .populate('uploadedBy', 'firstName lastName')
-      // Sorting: Custom Campaigns & Featured first, then Trending Score, then Newest
-      .sort({ hasCustomCampaign: -1, featured: -1, trendingScore: -1, createdAt: -1 })
-      .skip(skip)
-      .limit(parseInt(limit));
+    let models;
+    
+    // If randomize is enabled (default for homepage)
+    if (randomize === 'true') {
+      // Fetch prioritized models first
+      const priorityModels = await Model.find({ 
+        ...filter, 
+        $or: [{ hasCustomCampaign: true }, { featured: true }, { isSponsored: true }]
+      }).populate('uploadedBy', 'firstName lastName');
+      
+      // Fetch regular models with random sampling
+      const regularModels = await Model.aggregate([
+        { 
+          $match: { 
+            ...filter, 
+            hasCustomCampaign: { $ne: true },
+            featured: { $ne: true },
+            isSponsored: { $ne: true }
+          } 
+        },
+        { $sample: { size: parseInt(limit) } }
+      ]);
+      
+      // Populate uploadedBy for regular models
+      await Model.populate(regularModels, { path: 'uploadedBy', select: 'firstName lastName' });
+      
+      // Combine: priority first, then randomized regular models
+      models = [...priorityModels, ...regularModels].slice(skip, skip + parseInt(limit));
+    } else {
+      // Traditional sorting for specific queries/searches
+      models = await Model.find(filter)
+        .populate('uploadedBy', 'firstName lastName')
+        .sort({ hasCustomCampaign: -1, featured: -1, trendingScore: -1, createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit));
+    }
 
     const total = await Model.countDocuments(filter);
 
