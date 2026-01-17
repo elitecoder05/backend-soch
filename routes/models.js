@@ -226,7 +226,11 @@ router.get('/', async (req, res) => {
     if (search) {
       filter.$or = [
         { name: { $regex: search, $options: 'i' } },
-        { shortDescription: { $regex: search, $options: 'i' } }
+        { shortDescription: { $regex: search, $options: 'i' } },
+        { longDescription: { $regex: search, $options: 'i' } },
+        { provider: { $regex: search, $options: 'i' } },
+        { tags: { $in: [new RegExp(search, 'i')] } },
+        { category: { $regex: search, $options: 'i' } }
       ];
     }
 
