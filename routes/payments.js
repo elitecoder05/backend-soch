@@ -368,6 +368,7 @@ const planAmountMap = {
   monthly: 49 * 100,      // ₹49
   six_months: 149 * 100,  // ₹149
   annual: 249 * 100,      // ₹249
+  lifetime: 999 * 100,    // ₹999
   pro: 49 * 100,          // Legacy support
   enterprise: 249 * 100   // Legacy support
 };
@@ -432,10 +433,26 @@ router.post('/complete-subscription', authenticateToken, async (req, res) => {
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
     let end = new Date();
-    if (planId === 'monthly') end.setMonth(end.getMonth() + 1);
-    else if (planId === 'six_months') end.setMonth(end.getMonth() + 6);
-    else if (planId === 'annual') end.setFullYear(end.getFullYear() + 1);
-    else end.setMonth(end.getMonth() + 1);
+    
+    // Set subscription duration based on plan
+    switch (planId) {
+      case 'monthly':
+      case 'pro': // Legacy: 1 month
+        end.setMonth(end.getMonth() + 1);
+        break;
+      case 'six_months':
+        end.setMonth(end.getMonth() + 6);
+        break;
+      case 'annual':
+      case 'enterprise': // Legacy: 1 year
+        end.setFullYear(end.getFullYear() + 1);
+        break;
+      case 'lifetime':
+        end.setFullYear(end.getFullYear() + 100); // Lifetime = 100 years
+        break;
+      default:
+        end.setMonth(end.getMonth() + 1); // Default fallback: 1 month
+    }
 
     user.subscriptionType = 'pro';
     user.isProUser = true;
