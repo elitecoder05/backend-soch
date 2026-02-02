@@ -3,6 +3,16 @@ const Model = require('../models/Model');
 
 const router = express.Router();
 
+// Category alias mapping for backward compatibility
+const CATEGORY_ALIASES = {
+  'image-to-image': ['image-to-image', 'image'],
+  'code-ai': ['code-ai', 'code'],
+  'video-generation': ['video-generation', 'video'],
+  'audio-editing': ['audio-editing', 'audio'],
+  'copywriting': ['copywriting', 'marketing'],
+  'chatbots': ['chatbots']
+};
+
 // Static categories list (this mirrors backend validation list)
 const CATEGORIES = [
   // Existing categories
@@ -37,7 +47,8 @@ router.get('/', async (req, res) => {
     // For each category, compute model count so UI can display counts
     const categoriesWithCounts = await Promise.all(
       CATEGORIES.map(async (c) => {
-        const count = await Model.countDocuments({ category: c.slug, status: 'approved' });
+        const aliases = CATEGORY_ALIASES[c.slug] || [c.slug];
+        const count = await Model.countDocuments({ category: { $in: aliases }, status: 'approved' });
         return { ...c, id: c.slug, modelCount: count };
       })
     );

@@ -218,11 +218,24 @@ router.get('/', async (req, res) => {
   try {
     const { category, search, pricing, page = 1, limit = 20, randomize } = req.query;
     const skip = (page - 1) * limit;
+
+    // Category alias mapping for backward compatibility
+    const CATEGORY_ALIASES = {
+      'image-to-image': ['image-to-image', 'image'],
+      'code-ai': ['code-ai', 'code'],
+      'video-generation': ['video-generation', 'video'],
+      'audio-editing': ['audio-editing', 'audio'],
+      'copywriting': ['copywriting', 'marketing'],
+      'chatbots': ['chatbots']
+    };
     
     // Default filter: Only show APPROVED models to the public
     const filter = { status: 'approved' }; 
     
-    if (category && category !== 'all') filter.category = category;
+    if (category && category !== 'all') {
+      const categoryAliases = CATEGORY_ALIASES[category] || [category];
+      filter.category = { $in: categoryAliases };
+    }
     
     // ✅ NEW: Add pricing filter support
     if (pricing && pricing !== 'all') {
