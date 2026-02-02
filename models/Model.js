@@ -607,6 +607,16 @@ const modelSchema = new mongoose.Schema({
     trim: true,
     maxlength: [200, 'Each example prompt cannot be more than 200 characters']
   }],
+  pricingPlans: [{
+    name: { type: String, required: true },
+    price: { type: String, required: true },
+    billingCycle: { type: String, enum: ['one-time', 'monthly', 'yearly', 'free'], default: 'monthly' },
+    features: [String]
+  }],
+  faqs: [{
+    question: { type: String, required: true },
+    answer: { type: String, required: true }
+  }],
   uploadedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',

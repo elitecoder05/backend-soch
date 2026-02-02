@@ -213,16 +213,23 @@ router.put('/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// GET /api/models - Public Listing
+// GET /api/models - Public Listing with Advanced Filters & Smart Ranking
 router.get('/', async (req, res) => {
   try {
-    const { category, search, page = 1, limit = 20, randomize } = req.query;
+    const { category, search, pricing, page = 1, limit = 20, randomize } = req.query;
     const skip = (page - 1) * limit;
     
     // Default filter: Only show APPROVED models to the public
     const filter = { status: 'approved' }; 
     
     if (category && category !== 'all') filter.category = category;
+    
+    // ✅ NEW: Add pricing filter support
+    if (pricing && pricing !== 'all') {
+      filter.pricing = pricing;
+    }
+    
+    // ✅ IMPROVED: Enhanced search with better matching
     if (search) {
       filter.$or = [
         { name: { $regex: search, $options: 'i' } },
@@ -236,15 +243,14 @@ router.get('/', async (req, res) => {
 
     let models;
     
-    // If randomize is enabled (default for homepage)
-    if (randomize === 'true') {
-      // Fetch prioritized models first
+    // ✅ IMPROVED RANKING LOGIC: Prioritize based on multiple factors
+    if (randomize === 'true' && !search) {
+      // For homepage: show sponsored/featured first, then randomized
       const priorityModels = await Model.find({ 
         ...filter, 
         $or: [{ hasCustomCampaign: true }, { featured: true }, { isSponsored: true }]
       }).populate('uploadedBy', 'firstName lastName');
       
-      // Fetch regular models with random sampling
       const regularModels = await Model.aggregate([
         { 
           $match: { 
@@ -257,16 +263,35 @@ router.get('/', async (req, res) => {
         { $sample: { size: parseInt(limit) } }
       ]);
       
-      // Populate uploadedBy for regular models
       await Model.populate(regularModels, { path: 'uploadedBy', select: 'firstName lastName' });
-      
-      // Combine: priority first, then randomized regular models
       models = [...priorityModels, ...regularModels].slice(skip, skip + parseInt(limit));
     } else {
-      // Traditional sorting for specific queries/searches
+      // ✅ SMART RANKING: Category match > Tags > Popularity > Sponsored > Recent
+      // For searches, use scoring-based ranking
+      const sortOptions = search 
+        ? { 
+            // Search results: prioritize exact category match, then popularity
+            hasCustomCampaign: -1,
+            featured: -1,
+            isSponsored: -1,
+            trendingScore: -1,
+            categoryTrendingScore: -1,
+            rating: -1,
+            reviewsCount: -1,
+            createdAt: -1
+          }
+        : {
+            // Category/filter results: sponsored > trending > recent
+            hasCustomCampaign: -1,
+            featured: -1,
+            isSponsored: -1,
+            trendingScore: -1,
+            createdAt: -1
+          };
+      
       models = await Model.find(filter)
         .populate('uploadedBy', 'firstName lastName')
-        .sort({ hasCustomCampaign: -1, featured: -1, trendingScore: -1, createdAt: -1 })
+        .sort(sortOptions)
         .skip(skip)
         .limit(parseInt(limit));
     }

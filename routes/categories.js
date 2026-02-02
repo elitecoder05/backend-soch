@@ -5,24 +5,30 @@ const router = express.Router();
 
 // Static categories list (this mirrors backend validation list)
 const CATEGORIES = [
+  // Existing categories
+  { slug: 'image-to-image', name: 'Image to Image Generation', description: 'AI models for image-to-image conversion and transformation', icon: 'Image' },
+  { slug: 'code-ai', name: 'Code to AI Assistant', description: 'Code generation and AI-powered code assistants', icon: 'Code' },
+  { slug: 'voice-cloning', name: 'Voice to Voice Cloning', description: 'Voice synthesis and cloning models', icon: 'Mic' },
+  { slug: 'writing', name: 'Writing & Web', description: 'Writing assistance and web content creation tools', icon: 'BookOpen' },
+  { slug: 'research', name: 'SEO Research & Science', description: 'Research, analytics, and scientific models', icon: 'Zap' },
+  { slug: 'video-generation', name: 'Video Generation', description: 'AI models for creating and editing videos', icon: 'Video' },
+  { slug: 'audio-editing', name: 'Audio Editing', description: 'Audio processing, editing, and generation tools', icon: 'Mic' },
+  { slug: 'website-design', name: 'Website & Design', description: 'Design, UI/UX, and website creation tools', icon: 'Palette' },
+  { slug: 'education', name: 'Education & Studies', description: 'Educational and learning-focused AI models', icon: 'BookOpen' },
+  // New categories
+  { slug: 'github-projects', name: 'GitHub Projects', description: 'GitHub integration and project management tools', icon: 'Code' },
+  { slug: 'no-code-low-code', name: 'No-Code / Low-Code', description: 'No-code and low-code automation platforms', icon: 'Zap' },
+  { slug: 'seo-tools', name: 'SEO Tools', description: 'Search engine optimization and ranking tools', icon: 'Zap' },
+  { slug: 'text-to-speech', name: 'Text-to-Speech', description: 'Text to speech synthesis models', icon: 'Mic' },
+  { slug: 'text-to-video', name: 'Text-to-Video', description: 'AI models for generating videos from text', icon: 'Video' },
+  { slug: 'copywriting', name: 'Copywriting', description: 'AI-powered copywriting and marketing content creation', icon: 'BookOpen' },
+  { slug: 'ai-detection', name: 'AI Detection', description: 'Tools for detecting AI-generated content', icon: 'Zap' },
+  // Additional core categories
   { slug: 'chatbots', name: 'Chatbots', description: 'Conversational AI and chat assistants', icon: 'MessageSquare' },
-  { slug: 'image', name: 'Image', description: 'Image generation and editing models', icon: 'Image' },
-  { slug: 'code', name: 'Code', description: 'Code generation and analysis models', icon: 'Code' },
   { slug: 'productivity', name: 'Productivity', description: 'Tools to boost productivity', icon: 'Zap' },
-  { slug: 'voice', name: 'Voice', description: 'Speech and voice-based models', icon: 'Mic' },
-  { slug: 'writing', name: 'Writing', description: 'Writing and editing models', icon: 'BookOpen' },
-  { slug: 'research', name: 'Research', description: 'Research and analytics models', icon: 'Bot' },
-  { slug: 'agents', name: 'Agents', description: 'Agent-based automation models', icon: 'Bot' },
-  { slug: 'video', name: 'Video', description: 'Video generation and editing', icon: 'Video' },
-  { slug: 'audio', name: 'Audio', description: 'Audio processing and generation', icon: 'Mic' },
+  { slug: 'agents', name: 'AI Agents', description: 'Agent-based automation models', icon: 'Bot' },
   { slug: 'data-analysis', name: 'Data Analysis', description: 'Models for data analytics', icon: 'Zap' },
-  { slug: 'language', name: 'Language', description: 'Translation and language models', icon: 'BookOpen' },
-  { slug: 'design', name: 'Design', description: 'Design and creative models', icon: 'Palette' },
-  { slug: 'automation', name: 'Automation', description: 'Automation and workflow models', icon: 'Zap' },
-  { slug: 'healthcare', name: 'Healthcare', description: 'Healthcare and medical models', icon: 'Heart' },
-  { slug: 'education', name: 'Education', description: 'Educational models', icon: 'BookOpen' },
-  { slug: 'marketing', name: 'Marketing', description: 'Marketing and ad creation models', icon: 'Zap' },
-  { slug: 'finance', name: 'Finance', description: 'Finance and analysis models', icon: 'Zap' }
+  { slug: 'automation', name: 'Automation', description: 'Automation and workflow models', icon: 'Zap' }
 ];
 
 // GET /api/categories
