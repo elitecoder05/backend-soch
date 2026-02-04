@@ -25,7 +25,21 @@ const modelSchema = Joi.object({
   bestFor: Joi.array().default([]),
   features: Joi.array().default([]),
   examplePrompts: Joi.array().default([]),
-  screenshots: Joi.array().max(4).default([])
+  screenshots: Joi.array().max(4).default([]),
+  pricingPlans: Joi.array().items(
+    Joi.object({
+      name: Joi.string().required(),
+      price: Joi.string().required(),
+      billingCycle: Joi.string().valid('one-time', 'monthly', 'yearly', 'free').default('monthly'),
+      features: Joi.array().items(Joi.string()).default([])
+    })
+  ).default([]),
+  faqs: Joi.array().items(
+    Joi.object({
+      question: Joi.string().required(),
+      answer: Joi.string().required()
+    })
+  ).default([])
 });
 
 // GET /api/models/admin/all - Fetch models for Admin Dashboard
