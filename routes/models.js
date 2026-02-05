@@ -369,10 +369,23 @@ router.delete('/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// GET /api/models/:id - Get Single Model Details
+// GET /api/models/:id - Get Single Model Details (supports both ID and slug)
 router.get('/:id', async (req, res) => {
   try {
-    const model = await Model.findById(req.params.id).populate('uploadedBy', 'firstName lastName');
+    const { id } = req.params;
+    let model = null;
+
+    // Try to find by ObjectId first (if it's a valid ObjectId)
+    const mongoose = require('mongoose');
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      model = await Model.findById(id).populate('uploadedBy', 'firstName lastName');
+    }
+    
+    // If not found or invalid ObjectId, try to find by slug
+    if (!model) {
+      model = await Model.findOne({ slug: id }).populate('uploadedBy', 'firstName lastName');
+    }
+
     if (!model) return res.status(404).json({ success: false, message: 'Model not found' });
 
     // 🛡️ SECURITY: If tool is NOT approved, block everyone except Admins
@@ -394,9 +407,16 @@ router.post('/:id/promote', authenticateToken, async (req, res) => {
   try {
     const modelId = req.params.id;
     const userId = req.user._id;
+    const mongoose = require('mongoose');
 
     // 1. Find the model AND ensure it belongs to the logged-in user
-    const model = await Model.findOne({ _id: modelId, uploadedBy: userId });
+    let model = null;
+    if (mongoose.Types.ObjectId.isValid(modelId)) {
+      model = await Model.findOne({ _id: modelId, uploadedBy: userId });
+    }
+    if (!model) {
+      model = await Model.findOne({ slug: modelId, uploadedBy: userId });
+    }
 
     if (!model) {
       return res.status(404).json({ 
@@ -428,9 +448,16 @@ router.delete('/:id', authenticateToken, async (req, res) => {
   try {
     const modelId = req.params.id;
     const userId = req.user._id;
+    const mongoose = require('mongoose');
 
     // 1. Find the model
-    const model = await Model.findById(modelId);
+    let model = null;
+    if (mongoose.Types.ObjectId.isValid(modelId)) {
+      model = await Model.findById(modelId);
+    }
+    if (!model) {
+      model = await Model.findOne({ slug: modelId });
+    }
     
     if (!model) {
       return res.status(404).json({ 
@@ -449,11 +476,11 @@ router.delete('/:id', authenticateToken, async (req, res) => {
     }
 
     // 3. Delete from Model collection
-    await Model.findByIdAndDelete(modelId);
+    await Model.findByIdAndDelete(model._id);
 
     // 4. (Optional but recommended) Remove reference from User collection
     await User.findByIdAndUpdate(userId, { 
-      $pull: { uploadedModels: modelId } 
+      $pull: { uploadedModels: model._id } 
     });
 
     console.log(`🗑️ Model deleted: ${model.name} by user ${userId}`);

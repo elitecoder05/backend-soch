@@ -477,12 +477,11 @@ const modelSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Category is required'],
     enum: [
-      'chatbots', 'image', 'code', 'productivity', 'voice', 
-      'writing', 'research', 'agents', 'video', 'audio', 
-      'data-analysis', 'language', 'design', 'automation', 
-      'healthcare', 'education', 'marketing', 'finance',
-      'games', 'logo-creation', 'legal-assistant', 'deepfake', 
-      'developer-tools', 'summarizer', 'text-to-video'
+      'image-to-image', 'code-ai', 'voice-cloning', 'writing', 'research', 
+      'video-generation', 'audio-editing', 'website-design', 'education',
+      'github-projects', 'no-code-low-code', 'seo-tools', 'text-to-speech',
+      'text-to-video', 'copywriting', 'ai-detection', 'chatbots', 
+      'productivity', 'agents', 'data-analysis', 'automation'
     ]
   },
   tags: [{
