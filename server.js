@@ -182,6 +182,7 @@ const modelRoutes = require('./routes/models');
 const authRoutes = require('./routes/auth');
 const paymentRoutes = require('./routes/payments');
 const categoryRoutes = require('./routes/categories');
+const scriptGeneratorRoutes = require('./backend-script/routes/scriptGenerator');
 
 const app = express();
 const PORT = process.env.PORT || 1000;
@@ -326,6 +327,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/categories', categoryRoutes);
+app.use('/api/script-generator', scriptGeneratorRoutes);
 
 // Start Server
 app.listen(PORT, () => {
