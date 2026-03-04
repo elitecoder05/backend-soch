@@ -242,4 +242,95 @@ const generateScript = async (params) => {
   }
 };
 
-module.exports = { generateScript };
+/**
+ * Regenerate a single section (hook | body | cta) of an existing script.
+ *
+ * @param {Object} params - Original generation params
+ * @param {Object} currentScript - The full existing script result
+ * @param {'hook'|'body'|'cta'} section - Which section to regenerate
+ * @param {string} [instruction] - Optional user instruction for the rewrite
+ */
+const regenerateSection = async (params, currentScript, section, instruction = '') => {
+  try {
+    const genAI = getGeminiClient();
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-3-flash-preview',
+      systemInstruction: SYSTEM_PROMPT,
+      generationConfig: {
+        temperature: 0.9,  // slightly higher for variety
+        topP: 0.92,
+        topK: 40,
+        maxOutputTokens: 1024,
+        responseMimeType: 'application/json',
+      },
+    });
+
+    const audienceLabel = params.audience === 'custom' ? (params.customAudience || 'General') : params.audience;
+    const ctaLabel = params.ctaType === 'custom' ? (params.customCta || 'Custom CTA') : params.ctaType;
+
+    const existingScript = `
+Hook: ${currentScript.hook.text}
+Body: ${currentScript.body.text}
+CTA: ${currentScript.cta.included ? currentScript.cta.text : '(none)'}
+`.trim();
+
+    let sectionPrompt = '';
+    if (section === 'hook') {
+      sectionPrompt = `Rewrite ONLY the HOOK for this script. Keep the same topic, tone, and audience.
+${instruction ? `SPECIFIC INSTRUCTION: ${instruction}` : 'Make the hook fresh and different from the current one.'}
+
+Return JSON with ONLY this structure:
+{ "hook": { "type": "<hook type>", "text": "<new hook text>" } }`;
+    } else if (section === 'body') {
+      sectionPrompt = `Rewrite ONLY the BODY of this script. Keep the same topic, tone, and audience.
+${instruction ? `SPECIFIC INSTRUCTION: ${instruction}` : 'Use a different storytelling framework for variety.'}
+
+Return JSON with ONLY this structure:
+{ "body": { "framework": "<framework name>", "text": "<new body text>" } }`;
+    } else if (section === 'cta') {
+      const ctaInstruction = params.ctaEnabled
+        ? `CTA type: "${ctaLabel}". Write a natural CTA.`
+        : 'CTA is disabled. Return cta.included = false and cta.text = "".';
+      sectionPrompt = `Rewrite ONLY the CTA for this script. ${ctaInstruction}
+${instruction ? `SPECIFIC INSTRUCTION: ${instruction}` : ''}
+
+Return JSON with ONLY this structure:
+{ "cta": { "included": <bool>, "text": "<cta text or empty string>" } }`;
+    }
+
+    const fullPrompt = `
+ORIGINAL TOPIC: ${params.topic}
+TONE: ${params.tone}
+LANGUAGE: ${params.language}
+AUDIENCE: ${audienceLabel}
+EMOTIONAL INTENSITY: ${params.emotionalIntensity}
+
+CURRENT SCRIPT:
+${existingScript}
+
+TASK: ${sectionPrompt}
+`;
+
+    console.log(`[ScriptGen] Regenerating section: ${section} for topic: ${params.topic}`);
+    const result = await model.generateContent(fullPrompt);
+    const text = result.response.text();
+
+    let sectionData;
+    try {
+      sectionData = JSON.parse(text);
+    } catch {
+      const match = text.match(/\{[\s\S]*\}/);
+      if (match) sectionData = JSON.parse(match[0]);
+      else throw new Error('AI response was not valid JSON.');
+    }
+
+    console.log(`[ScriptGen] ✅ Section "${section}" regenerated.`);
+    return sectionData;
+
+  } catch (error) {
+    console.error(`[ScriptGen] ❌ Section regeneration error (${section}):`, error.message);
+    throw new Error('Section regeneration failed: ' + error.message);
+  }
+};
+
+module.exports = { generateScript, regenerateSection };
