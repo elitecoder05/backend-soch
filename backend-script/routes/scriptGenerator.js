@@ -6,7 +6,7 @@
 
 const express = require('express');
 const router = express.Router();
-const { generateScript } = require('../services/geminiService');
+const { generateScript, regenerateSection } = require('../services/geminiService');
 
 /**
  * POST /generate
@@ -143,6 +143,51 @@ router.post('/generate', async (req, res) => {
       success: false,
       error: error.message || 'An unexpected error occurred while generating the script.'
     });
+  }
+});
+
+/**
+ * POST /regenerate-section
+ * 
+ * Regenerates a single section (hook | body | cta) of an existing script.
+ * 
+ * Body params:
+ * - section (required): 'hook' | 'body' | 'cta'
+ * - params (required): Original generation params (topic, tone, language, etc.)
+ * - currentScript (required): The full existing script result object
+ * - instruction (optional): User's specific instruction for the rewrite
+ */
+router.post('/regenerate-section', async (req, res) => {
+  try {
+    const { section, params, currentScript, instruction = '' } = req.body;
+
+    const validSections = ['hook', 'body', 'cta'];
+    if (!section || !validSections.includes(section)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid section. Choose "hook", "body", or "cta".'
+      });
+    }
+
+    if (!params || !params.topic) {
+      return res.status(400).json({ success: false, error: 'Original params with topic are required.' });
+    }
+
+    if (!currentScript || !currentScript.hook || !currentScript.body) {
+      return res.status(400).json({ success: false, error: 'currentScript with hook and body is required.' });
+    }
+
+    console.log(`[API] Regenerating section "${section}" for topic: "${params.topic.substring(0, 50)}"`);
+
+    const sectionData = await regenerateSection(params, currentScript, section, instruction);
+
+    res.status(200).json({ success: true, data: sectionData });
+
+  } catch (error) {
+    console.error('[API] Section regeneration error:', error.message);
+    
+    const statusCode = error.message.includes('rate limit') || error.message.includes('quota') ? 429 : 500;
+    res.status(statusCode).json({ success: false, error: error.message });
   }
 });
 
