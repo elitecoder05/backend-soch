@@ -41,7 +41,8 @@ router.post('/generate', async (req, res) => {
       tone = 'Inspirational',
       ctaEnabled = false,
       ctaType = 'Follow for more',
-      customCta
+      customCta,
+      referenceUrl
     } = req.body;
 
     // Validate required field
@@ -124,7 +125,8 @@ router.post('/generate', async (req, res) => {
       tone,
       ctaEnabled,
       ctaType,
-      customCta
+      customCta,
+      referenceUrl
     });
 
     res.status(200).json({
