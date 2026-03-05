@@ -35,7 +35,8 @@ const buildUserPrompt = ({
   tone,
   ctaEnabled,
   ctaType,
-  customCta
+  customCta,
+  referenceUrl
 }) => {
   // Resolve duration to word count guidance
   let durationGuide = '';
@@ -89,7 +90,7 @@ AUDIENCE: ${audienceLabel}
 EMOTIONAL INTENSITY: ${intensityLabel}
 TONE: ${tone}
 ${ctaInstruction}
-${params.referenceUrl ? `\nREFERENCE: The user wants inspiration from this content: ${params.referenceUrl}\nUse the style, structure, or vibe of this reference as inspiration for the script. Do NOT copy it — just draw creative ideas and tonal influence from it.` : ''}
+${referenceUrl ? `\nREFERENCE: The user wants inspiration from this content: ${referenceUrl}\nUse the style, structure, or vibe of this reference as inspiration for the script. Do NOT copy it — just draw creative ideas and tonal influence from it.` : ''}
 
 Remember:
 - Select the most appropriate hook type based on the topic
