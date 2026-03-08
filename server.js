@@ -330,6 +330,7 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/script-generator', scriptGeneratorRoutes);
 app.use('/api/script-history', scriptHistoryRoutes);
+app.use('/api/admin/pricing', require('./routes/adminPricing')); // ✅ Admin pricing management
 
 // Start Server
 app.listen(PORT, () => {
