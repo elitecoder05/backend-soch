@@ -38,22 +38,23 @@ const buildUserPrompt = ({
   customCta,
   referenceUrl
 }) => {
-  // Resolve duration to word count guidance
+  // STRICT word count control as per training instructions
   let durationGuide = '';
   let durationLabel = '';
+  
   if (duration === '30s') {
-    durationGuide = '90-120 words. Keep it tight and aggressive.';
+    durationGuide = '90 words EXACTLY';
     durationLabel = '30 seconds';
   } else if (duration === '1min') {
-    durationGuide = '150-200 words. Balanced pacing.';
+    durationGuide = '150 words EXACTLY';
     durationLabel = '1 minute';
   } else if (duration === 'custom' && customDuration) {
     const minutes = parseFloat(customDuration);
-    const wordCount = Math.round(minutes * 150);
-    durationGuide = `Approximately ${wordCount} words (${minutes} minutes at 150 words/min).`;
+    const wordCount = Math.round(minutes * 150); // 150 words per minute
+    durationGuide = `${wordCount} words EXACTLY (${minutes} minutes)`;
     durationLabel = `${customDuration} minutes`;
   } else {
-    durationGuide = '150-200 words.';
+    durationGuide = '150 words EXACTLY';
     durationLabel = '1 minute';
   }
 
@@ -80,24 +81,45 @@ const buildUserPrompt = ({
     ctaInstruction = 'CTA: DISABLED. Do NOT include any call to action.';
   }
 
+  // Reference URL handling as per training instructions
+  let referenceInstruction = '';
+  if (referenceUrl) {
+    referenceInstruction = `
+
+REFERENCE STYLE REPLICATION:
+User provided this reference: ${referenceUrl}
+
+FOLLOW THESE STEPS:
+1. Identify the structure of this reference (hook type, narrative flow, sentence length, pacing) 
+2. Replicate the STRUCTURE but change the topic completely
+3. NEVER copy sentences from the reference
+4. ONLY copy: pacing, storytelling rhythm, hook pattern, sentence structure
+
+Your script must have the same STYLE and STRUCTURE as the reference but different content.`;
+  }
+
   return `
-Generate a complete video script for the following:
+Generate a script for:
 
 TOPIC: ${topic}
-DURATION: ${durationLabel} (Target word count: ${durationGuide})
+DURATION: ${durationLabel} (Word count: ${durationGuide})
 LANGUAGE: ${language}
 AUDIENCE: ${audienceLabel}
 EMOTIONAL INTENSITY: ${intensityLabel}
 TONE: ${tone}
-${ctaInstruction}
-${referenceUrl ? `\nREFERENCE: The user wants inspiration from this content: ${referenceUrl}\nUse the style, structure, or vibe of this reference as inspiration for the script. Do NOT copy it — just draw creative ideas and tonal influence from it.` : ''}
+${ctaInstruction}${referenceInstruction}
 
-Remember:
-- Select the most appropriate hook type based on the topic
-- Select the most appropriate body framework based on content type, audience, and duration
-- Match word count strictly to the duration
-- The script must sound SPOKEN, not WRITTEN
-- Output ONLY valid JSON as specified in your instructions
+STRICT REQUIREMENTS:
+- Apply natural speech filter: sentences max 12 words each
+- Write like talking to a friend, not writing an essay
+- Use only 3 narrative frameworks: Micro Story, Problem→Insight→Shift, Open Loop Story
+- Hook: Maximum 12 words, maximum 2 lines, must sound like spoken language
+- Match word count EXACTLY to duration requirement
+- Never use prohibited words (AI, psychological hooks, algorithm, etc.)
+- Output ONLY valid JSON as specified
+
+Remember: This script will be SPOKEN, not READ. Make it conversational and natural.`;
+};
 `;
 };
 
