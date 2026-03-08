@@ -14,9 +14,13 @@ const orderSchema = new mongoose.Schema({
     type: Number, 
     required: true
   },
+  amountINR: {
+    type: Number,
+    // INR amount for convenient reference
+  },
   currency: {
     type: String,
-    default: 'INR'
+    default: 'USD'
   },
   razorpayOrderId: {
     type: String,

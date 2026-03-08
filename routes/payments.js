@@ -354,6 +354,7 @@ const crypto = require('crypto');
 const User = require('../models/User');
 const Model = require('../models/Model');
 const Order = require('../models/Order'); // ✅ Import Order Model
+const PricingPlan = require('../models/PricingPlan'); // ✅ Import PricingPlan Model
 const { authenticateToken } = require('../middleware/auth');
 require('dotenv').config();
 
@@ -362,15 +363,30 @@ const key_secret = process.env.RAZORPAY_KEY_SECRET;
 
 const razorpay = new Razorpay({ key_id, key_secret });
 
-// --- CONFIGURATION: Subscription Plans ---
+// --- CURRENCY CONVERSION CONFIGURATION ---
+const USD_TO_INR_RATE = 83; // Current approximate exchange rate
+const convertUSDToINR = (usdAmount) => {
+  return Math.round(usdAmount * USD_TO_INR_RATE);
+};
+
+// Convert USD cents to INR paise (1 USD cent = 83 paise at current rate)
+const convertUSDCentsToINRPaise = (usdCents) => {
+  const usdDollars = usdCents / 100;
+  const inrRupees = convertUSDToINR(usdDollars);
+  return inrRupees * 100; // Convert to paise
+};
+
+// --- LEGACY CONFIGURATION: Subscription Plans (Fallback) ---
 const planAmountMap = {
   free: 0,
-  monthly: 49 * 100,      // ₹49
-  six_months: 149 * 100,  // ₹149
-  annual: 249 * 100,      // ₹249
-  lifetime: 999 * 100,    // ₹999
-  pro: 49 * 100,          // Legacy support
-  enterprise: 249 * 100   // Legacy support
+  monthly: 5 * 100,       // $5
+  six_months: 12 * 100,   // $12
+  annual: 20 * 100,       // $20
+  lifetime: 99 * 100,     // $99
+  'script-free': 0,       // $0
+  'script-creator': 5 * 100,  // $5
+  pro: 5 * 100,          // Legacy support
+  enterprise: 20 * 100   // Legacy support
 };
 
 // ==========================================
@@ -381,12 +397,29 @@ const planAmountMap = {
 router.post('/create-order', authenticateToken, async (req, res) => {
   try {
     const { planId } = req.body;
-    const amount = planAmountMap[planId] ?? planAmountMap.pro;
+    
+    // Try to get amount from PricingPlan model first, fallback to legacy
+    let amount;
+    try {
+      amount = await PricingPlan.getPaymentAmount(planId);
+    } catch (error) {
+      console.log('PricingPlan lookup failed, using legacy planAmountMap');
+    }
+    
+    // Fallback to legacy pricing if not found in database
+    if (!amount && amount !== 0) {
+      amount = planAmountMap[planId] ?? planAmountMap.pro;
+    }
 
-    if (!amount) return res.status(400).json({ success: false, message: 'Invalid plan' });
+    if (amount === null || amount === undefined) {
+      return res.status(400).json({ success: false, message: 'Invalid plan or plan not found' });
+    }
+
+    // Convert USD cents to INR paise for Indian users
+    const amountInINRPaise = convertUSDCentsToINRPaise(amount);
 
     const options = {
-      amount,
+      amount: amountInINRPaise,
       currency: 'INR',
       receipt: `sub_${Date.now()}`,
       payment_capture: 1
@@ -398,7 +431,8 @@ router.post('/create-order', authenticateToken, async (req, res) => {
     await Order.create({
         userId: req.user._id,
         planId: planId,
-        amount: amount / 100, // Store in Rupees
+        amount: amount / 100, // Store original USD amount for reference
+        amountINR: amountInINRPaise / 100, // Store INR amount
         razorpayOrderId: order.id,
         status: 'created'
     });
@@ -408,6 +442,40 @@ router.post('/create-order', authenticateToken, async (req, res) => {
   } catch (err) {
     console.error('Subscription Order Error:', err);
     res.status(500).json({ success: false, message: 'Failed to create subscription order' });
+  }
+});
+
+// GET /pricing-plans - Get active pricing plans for frontend
+router.get('/pricing-plans', async (req, res) => {
+  try {
+    const { category } = req.query;
+    
+    let plans;
+    if (category) {
+      plans = await PricingPlan.getPlansByCategory(category, true);
+    } else {
+      plans = await PricingPlan.find({ isActive: true }).sort({ category: 1, displayOrder: 1 });
+    }
+    
+    // Convert to frontend format
+    const frontendPlans = plans.map(plan => plan.toFrontendFormat());
+    
+    res.json({
+      success: true,
+      data: {
+        plans: frontendPlans,
+        categories: {
+          store: frontendPlans.filter(p => plans.find(original => original.planId === p.id && original.category === 'store')),
+          scriptGenerator: frontendPlans.filter(p => plans.find(original => original.planId === p.id && original.category === 'script-generator'))
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Get pricing plans error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch pricing plans'
+    });
   }
 });
 
@@ -482,7 +550,7 @@ router.post('/complete-subscription', authenticateToken, async (req, res) => {
 // 2. BOOST FLOW (New Feature)
 // ==========================================
 
-// ✅ Create Boost Order (Dynamic Price: ₹50 * days)
+// ✅ Create Boost Order (Dynamic Price: $1 * days)
 router.post('/create-boost-order', authenticateToken, async (req, res) => {
   try {
     const { toolId, days } = req.body;
@@ -492,11 +560,14 @@ router.post('/create-boost-order', authenticateToken, async (req, res) => {
     }
 
     // Dynamic Price Calculation
-    const PRICE_PER_DAY = 50; 
-    const amountInPaise = Math.round(days * PRICE_PER_DAY * 100); // ₹50 * days * 100
+    const PRICE_PER_DAY = 1; // $1 per day
+    const amountInCents = Math.round(days * PRICE_PER_DAY * 100); // $1 * days * 100
+    
+    // Convert USD cents to INR paise for Indian users
+    const amountInINRPaise = convertUSDCentsToINRPaise(amountInCents);
 
     const options = {
-      amount: amountInPaise,
+      amount: amountInINRPaise,
       currency: 'INR',
       receipt: `bst_${Date.now()}`,
       payment_capture: 1,
@@ -513,7 +584,8 @@ router.post('/create-boost-order', authenticateToken, async (req, res) => {
     await Order.create({
         userId: req.user._id,
         planId: `boost_${days}_days`, // Custom ID to track it's a boost
-        amount: amountInPaise / 100,
+        amount: amountInCents / 100, // Store original USD amount
+        amountINR: amountInINRPaise / 100, // Store INR amount
         razorpayOrderId: order.id,
         status: 'created'
     });
