@@ -102,6 +102,12 @@ const pricingPlanSchema = new mongoose.Schema({
         default: 'Choose Plan'
     },
     
+    // Trust line text (displayed below the button)
+    trustLine: {
+        type: String,
+        maxlength: 200
+    },
+    
     // Order for display
     displayOrder: {
         type: Number,
@@ -147,6 +153,7 @@ pricingPlanSchema.methods.toFrontendFormat = function() {
         badge: this.badge,
         color: this.color,
         buttonText: this.buttonText,
+        trustLine: this.trustLine,
         launchPrice: this.launchPrice ? `$${this.launchPrice}` : undefined
     };
 };
