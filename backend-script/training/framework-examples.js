@@ -45,33 +45,4 @@ const FRAMEWORK_EXAMPLES = {
 
 module.exports = { FRAMEWORK_EXAMPLES };
 
-And they had one question: "Why are you still playing small?"
-
-That one line hit harder than any motivational speaker ever could. Because it came from a stranger who saw what I was too afraid to admit.
-
-That night, I made the biggest decision of my career.`
-    }
-  },
-
-  dataStoryHybrid: {
-    name: "Data + Story Hybrid",
-    bestFor: "Credibility content, Entrepreneurship, Creator advice",
-    structure: ["Real situation", "Insert statistic/fact", "Connect to personal meaning"],
-    example: {
-      topic: "Why most creators give up in 6 months",
-      language: "Hinglish",
-      intensity: 3,
-      body: `Stats kehte hain — 90% creators 6 months mein quit kar dete hain. Sirf 10% first year cross karte hain.
-
-Main bhi almost quit karne wala tha. 4 months mein — 12 videos, 200 views per video, zero sponsors.
-
-Lekin ek cheez samajh aayi: log content ki quality dekh ke nahi rukte. Wo consistency dekhte hain. Trust build hota hai repetition se, not perfection se.
-
-Aur jab maine 6-month mark cross kiya — audience growth exponential ho gayi. Kyunki ab logo ko laga: "Yeh banda serious hai."
-
-Data support karta hai: creators who post 100+ videos have 10x more growth than those who post 30. The game isn't talent. It's endurance.`
-    }
-  }
-};
-
 module.exports = { FRAMEWORK_EXAMPLES };

@@ -99,7 +99,7 @@ Your script must have the same STYLE and STRUCTURE as the reference but differen
   }
 
   return `
-Generate a script for:
+Generate a script strictly following training instructions for:
 
 TOPIC: ${topic}
 DURATION: ${durationLabel} (Word count: ${durationGuide})
@@ -109,26 +109,25 @@ EMOTIONAL INTENSITY: ${intensityLabel}
 TONE: ${tone}
 ${ctaInstruction}${referenceInstruction}
 
-STRICT REQUIREMENTS:
+STRICT REQUIREMENTS (NON-NEGOTIABLE):
 - Apply natural speech filter: sentences max 12 words each
 - Write like talking to a friend, not writing an essay
-- Use only 3 narrative frameworks: Micro Story, Problem→Insight→Shift, Open Loop Story
+- Use ONLY 3 narrative frameworks: Micro Story, Problem→Insight→Shift, Open Loop Story
 - Hook: Maximum 12 words, maximum 2 lines, must sound like spoken language
 - Match word count EXACTLY to duration requirement
-- Never use prohibited words (AI, psychological hooks, algorithm, etc.)
+- Never use prohibited words (NEVER mention: AI, human touch, psychological hooks, content strategy, algorithm, storytelling technique)
 - Output ONLY valid JSON as specified
+- Apply Layer 3 Natural Speech Filter to all content
+- Break long sentences into shorter ones (max 12 words per sentence)
 
-Remember: This script will be SPOKEN, not READ. Make it conversational and natural.`;
-};
-`;
-};
+CRITICAL: This script will be SPOKEN, not read. Make it conversational and natural like explaining to a friend.`;
+}
 
 /**
  * Build few-shot context from training examples
  */
 const buildFewShotContext = () => {
-  return `
-Here is a complete example of an ideal script output:
+  return `Here is a complete example of an ideal script output:
 
 INPUT:
 Topic: "${FULL_SCRIPT_EXAMPLE.input.topic}"
@@ -142,8 +141,7 @@ CTA: ${FULL_SCRIPT_EXAMPLE.input.ctaEnabled ? 'Enabled' : 'Disabled'}
 OUTPUT:
 ${JSON.stringify(FULL_SCRIPT_EXAMPLE.output, null, 2)}
 
-Now generate a script following this exact format and quality level.
-`;
+Now generate a script following this exact format and quality level.`;
 };
 
 /**
