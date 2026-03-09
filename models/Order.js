@@ -10,17 +10,31 @@ const orderSchema = new mongoose.Schema({
     type: String, 
     required: true
   },
+  category: {
+    type: String,
+    enum: ['store', 'script-generator', 'boost'],
+    required: true
+  },
   amount: {
     type: Number, 
+    required: true
+  },
+  currency: {
+    type: String,
+    default: 'USD'
+  },
+  paymentCurrency: {
+    type: String,
+    enum: ['USD', 'INR'],
+    required: true
+  },
+  paymentAmount: {
+    type: Number,
     required: true
   },
   amountINR: {
     type: Number,
     // INR amount for convenient reference
-  },
-  currency: {
-    type: String,
-    default: 'USD'
   },
   razorpayOrderId: {
     type: String,
@@ -32,7 +46,7 @@ const orderSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['created', 'paid', 'failed'],
+    enum: ['created', 'paid', 'failed', 'completed'],
     default: 'created'
   }
 }, {
