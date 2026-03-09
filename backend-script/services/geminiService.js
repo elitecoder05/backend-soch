@@ -194,8 +194,11 @@ const generateScript = async (params) => {
         temperature: 0.85,
         topP: 0.92,
         topK: 40,
-        maxOutputTokens: 2048,
+        maxOutputTokens: 8192,
         responseMimeType: 'application/json',
+        thinkingConfig: {
+          thinkingBudget: 1024,
+        },
       },
     });
 
@@ -358,8 +361,11 @@ const regenerateSection = async (params, currentScript, section, instruction = '
         temperature: 0.9,  // slightly higher for variety
         topP: 0.92,
         topK: 40,
-        maxOutputTokens: 1024,
+        maxOutputTokens: 4096,
         responseMimeType: 'application/json',
+        thinkingConfig: {
+          thinkingBudget: 512,
+        },
       },
     });
 
