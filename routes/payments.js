@@ -71,10 +71,14 @@ router.post('/create-order', authenticateToken, async (req, res) => {
 
     console.log('💱 [CREATE-ORDER] Currency conversion:', { isIndia, amount, currency, originalUSD: plan.priceUSD });
 
+    // Razorpay receipt has a 40-character limit
+    const shortCat = category === 'script-generator' ? 'sg' : 'st';
+    const receipt = `${shortCat}_${planId}_${Date.now()}`.slice(0, 40);
+
     const options = {
       amount,
       currency,
-      receipt: `${category}_${planId}_${Date.now()}`,
+      receipt,
       payment_capture: 1,
       notes: {
         planId: plan.planId,
