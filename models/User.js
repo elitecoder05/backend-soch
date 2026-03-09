@@ -83,6 +83,62 @@ const userSchema = new mongoose.Schema({
   isProUser: {
     type: Boolean,
     default: false
+  },
+  // Script Generator Subscription
+  scriptGeneratorSubscription: {
+    planId: {
+      type: String,
+      default: 'script-free'
+    },
+    status: {
+      type: String,
+      enum: ['free', 'active', 'expired', 'cancelled'],
+      default: 'free'
+    },
+    startDate: {
+      type: Date,
+      default: null
+    },
+    endDate: {
+      type: Date,
+      default: null
+    },
+    isUnlimited: {
+      type: Boolean,
+      default: false
+    },
+    usageCount: {
+      type: Number,
+      default: 0
+    },
+    monthlyResetDate: {
+      type: Date,
+      default: null
+    }
+  },
+  // Store Listing Subscription
+  storeSubscription: {
+    planId: {
+      type: String,
+      default: null
+    },
+    status: {
+      type: String,
+      enum: ['none', 'active', 'expired', 'cancelled'],
+      default: 'none'
+    },
+    startDate: {
+      type: Date,
+      default: null
+    },
+    endDate: {
+      type: Date,
+      default: null
+    },
+    listingType: {
+      type: String,
+      default: null
+    }
   }
 }, {
   timestamps: true,

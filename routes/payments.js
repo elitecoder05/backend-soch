@@ -1,360 +1,11 @@
-// // const express = require('express');
-// // const router = express.Router();
-// // const Razorpay = require('razorpay');
-// // const crypto = require('crypto');
-// // const User = require('../models/User');
-// // const Model = require('../models/Model');
-// // const { authenticateToken } = require('../middleware/auth');
-// // require('dotenv').config();
-
-// // const key_id = process.env.RAZORPAY_KEY_ID;
-// // const key_secret = process.env.RAZORPAY_KEY_SECRET;
-
-// // const razorpay = new Razorpay({ key_id, key_secret });
-
-// // // --- CONFIGURATION: Subscription Plans ---
-// // const planAmountMap = {
-// //   free: 0,
-// //   monthly: 49 * 100,      // ₹49
-// //   six_months: 149 * 100,  // ₹149
-// //   annual: 249 * 100,      // ₹249
-// //   pro: 49 * 100,          // Legacy support
-// //   enterprise: 249 * 100   // Legacy support
-// // };
-
-// // // ==========================================
-// // // 1. SUBSCRIPTION FLOW (Pricing Page)
-// // // ==========================================
-
-// // // Create Order for Subscription
-// // router.post('/create-order', authenticateToken, async (req, res) => {
-// //   try {
-// //     const { planId } = req.body;
-// //     const amount = planAmountMap[planId] ?? planAmountMap.pro;
-
-// //     if (!amount) return res.status(400).json({ success: false, message: 'Invalid plan' });
-
-// //     const options = {
-// //       amount,
-// //       currency: 'INR',
-// //       receipt: `sub_${Date.now()}`,
-// //       payment_capture: 1
-// //     };
-
-// //     const order = await razorpay.orders.create(options);
-// //     res.json({ success: true, order, key_id });
-
-// //   } catch (err) {
-// //     console.error('Subscription Order Error:', err);
-// //     res.status(500).json({ success: false, message: 'Failed to create subscription order' });
-// //   }
-// // });
-
-// // // Complete/Verify Subscription
-// // router.post('/complete-subscription', authenticateToken, async (req, res) => {
-// //   try {
-// //     const { planId, razorpay_payment_id, razorpay_order_id, razorpay_signature } = req.body;
-// //     const userId = req.user._id; // Ensure this matches your auth middleware (req.user.id or req.user._id)
-
-// //     // 1. Verify Signature
-// //     const body = razorpay_order_id + "|" + razorpay_payment_id;
-// //     const expectedSignature = crypto
-// //       .createHmac('sha256', key_secret)
-// //       .update(body.toString())
-// //       .digest('hex');
-
-// //     if (expectedSignature !== razorpay_signature) {
-// //       return res.status(400).json({ success: false, message: 'Invalid Payment Signature' });
-// //     }
-
-// //     // 2. Update User
-// //     const user = await User.findById(userId);
-// //     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
-
-// //     let end = new Date();
-// //     if (planId === 'monthly') end.setMonth(end.getMonth() + 1);
-// //     else if (planId === 'six_months') end.setMonth(end.getMonth() + 6);
-// //     else if (planId === 'annual') end.setFullYear(end.getFullYear() + 1);
-// //     else end.setMonth(end.getMonth() + 1); // Default
-
-// //     user.subscriptionType = 'pro';
-// //     user.isProUser = true;
-// //     user.subscriptionStatus = 'active';
-// //     user.subscriptionStartDate = new Date();
-// //     user.subscriptionEndDate = end;
-// //     user.subscriptionPlanId = planId;
-
-// //     await user.save();
-
-// //     res.json({ success: true, message: 'Subscription active!', data: { user } });
-
-// //   } catch (error) {
-// //     console.error('Subscription Verification Error:', error);
-// //     res.status(500).json({ success: false, message: 'Payment verification failed' });
-// //   }
-// // });
-
-// // // ==========================================
-// // // 2. PROMOTION FLOW (Get Featured Page)
-// // // ==========================================
-
-// // // Create Order for Featured Tool Promotion
-// // router.post('/create-promotion-order', authenticateToken, async (req, res) => {
-// //   try {
-// //     const amount = 2999 * 100; // ₹2999
-// //     const options = {
-// //       amount,
-// //       currency: 'INR',
-// //       receipt: `promo_${Date.now()}`,
-// //       payment_capture: 1
-// //     };
-
-// //     const order = await razorpay.orders.create(options);
-// //     res.json({ success: true, order, key_id });
-
-// //   } catch (err) {
-// //     console.error('Promo Order Error:', err);
-// //     res.status(500).json({ success: false, message: 'Failed to create promotion order' });
-// //   }
-// // });
-
-// // // Verify Promotion Payment
-// // router.post('/verify-promotion', authenticateToken, async (req, res) => {
-// //   try {
-// //     const { razorpay_order_id, razorpay_payment_id, razorpay_signature, modelId } = req.body;
-
-// //     const body = razorpay_order_id + "|" + razorpay_payment_id;
-// //     const expectedSignature = crypto
-// //       .createHmac('sha256', key_secret)
-// //       .update(body.toString())
-// //       .digest('hex');
-
-// //     if (expectedSignature !== razorpay_signature) {
-// //       return res.status(400).json({ success: false, message: 'Invalid Payment Signature' });
-// //     }
-
-// //     const model = await Model.findOne({ _id: modelId, uploadedBy: req.user._id });
-// //     if (!model) return res.status(404).json({ success: false, message: 'Model not found' });
-
-// //     model.featured = true;
-// //     model.trendingScore = (model.trendingScore || 0) + 100;
-// //     model.categoryTrendingScore = (model.categoryTrendingScore || 0) + 100;
-    
-// //     await model.save();
-
-// //     res.json({ success: true, message: 'Tool Featured Successfully!', data: { model } });
-
-// //   } catch (error) {
-// //     console.error('Promo Verification Error:', error);
-// //     res.status(500).json({ success: false, message: 'Internal Server Error' });
-// //   }
-// // });
-
-// // module.exports = router;
-
-
-
-
-
-
-// const express = require('express');
-// const router = express.Router();
-// const Razorpay = require('razorpay');
-// const crypto = require('crypto');
-// const User = require('../models/User');
-// const Model = require('../models/Model');
-// const { authenticateToken } = require('../middleware/auth');
-// require('dotenv').config();
-
-// const key_id = process.env.RAZORPAY_KEY_ID;
-// const key_secret = process.env.RAZORPAY_KEY_SECRET;
-
-// const razorpay = new Razorpay({ key_id, key_secret });
-
-// // --- CONFIGURATION: Subscription Plans ---
-// const planAmountMap = {
-//   free: 0,
-//   monthly: 49 * 100,      // ₹49
-//   six_months: 149 * 100,  // ₹149
-//   annual: 249 * 100,      // ₹249
-//   pro: 49 * 100,          // Legacy support
-//   enterprise: 249 * 100   // Legacy support
-// };
-
-// // ==========================================
-// // 1. SUBSCRIPTION FLOW (Pricing Page)
-// // ==========================================
-
-// // Create Order for Subscription
-// router.post('/create-order', authenticateToken, async (req, res) => {
-//   try {
-//     const { planId } = req.body;
-//     const amount = planAmountMap[planId] ?? planAmountMap.pro;
-
-//     if (!amount) return res.status(400).json({ success: false, message: 'Invalid plan' });
-
-//     const options = {
-//       amount,
-//       currency: 'INR',
-//       receipt: `sub_${Date.now()}`,
-//       payment_capture: 1
-//     };
-
-//     const order = await razorpay.orders.create(options);
-//     res.json({ success: true, order, key_id });
-
-//   } catch (err) {
-//     console.error('Subscription Order Error:', err);
-//     res.status(500).json({ success: false, message: 'Failed to create subscription order' });
-//   }
-// });
-
-// // Complete/Verify Subscription
-// router.post('/complete-subscription', authenticateToken, async (req, res) => {
-//   try {
-//     const { planId, razorpay_payment_id, razorpay_order_id, razorpay_signature } = req.body;
-//     const userId = req.user._id;
-
-//     // 1. Verify Signature
-//     const body = razorpay_order_id + "|" + razorpay_payment_id;
-//     const expectedSignature = crypto
-//       .createHmac('sha256', key_secret)
-//       .update(body.toString())
-//       .digest('hex');
-
-//     if (expectedSignature !== razorpay_signature) {
-//       return res.status(400).json({ success: false, message: 'Invalid Payment Signature' });
-//     }
-
-//     // 2. Update User
-//     const user = await User.findById(userId);
-//     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
-
-//     let end = new Date();
-//     if (planId === 'monthly') end.setMonth(end.getMonth() + 1);
-//     else if (planId === 'six_months') end.setMonth(end.getMonth() + 6);
-//     else if (planId === 'annual') end.setFullYear(end.getFullYear() + 1);
-//     else end.setMonth(end.getMonth() + 1); // Default
-
-//     user.subscriptionType = 'pro';
-//     user.isProUser = true;
-//     user.subscriptionStatus = 'active';
-//     user.subscriptionStartDate = new Date();
-//     user.subscriptionEndDate = end;
-//     user.subscriptionPlanId = planId;
-
-//     await user.save();
-
-//     res.json({ success: true, message: 'Subscription active!', data: { user } });
-
-//   } catch (error) {
-//     console.error('Subscription Verification Error:', error);
-//     res.status(500).json({ success: false, message: 'Payment verification failed' });
-//   }
-// });
-
-// // ==========================================
-// // 2. BOOST FLOW (New Dynamic Promotion)
-// // ==========================================
-
-// // ✅ 1. Create Boost Order (Dynamic Price: ₹50 * days)
-// router.post('/create-boost-order', authenticateToken, async (req, res) => {
-//   try {
-//     const { toolId, days } = req.body;
-
-//     if (!toolId || !days) {
-//       return res.status(400).json({ success: false, message: "Tool ID and Days are required" });
-//     }
-
-//     // Dynamic Price Calculation
-//     const PRICE_PER_DAY = 50; 
-//     const amountInPaise = Math.round(days * PRICE_PER_DAY * 100); // ₹50 * days * 100
-
-//     const options = {
-//       amount: amountInPaise,
-//       currency: 'INR',
-//       receipt: `boost_${toolId}_${Date.now()}`,
-//       payment_capture: 1,
-//       notes: {
-//         toolId: toolId,
-//         days: days,
-//         type: "tool_boost"
-//       }
-//     };
-
-//     const order = await razorpay.orders.create(options);
-//     res.json({ success: true, order, key_id });
-
-//   } catch (err) {
-//     console.error('Boost Order Error:', err);
-//     res.status(500).json({ success: false, message: 'Failed to create boost order' });
-//   }
-// });
-
-// // ✅ 2. Verify Boost Payment & Activate
-// router.post('/verify-boost', authenticateToken, async (req, res) => {
-//   try {
-//     const { 
-//       razorpay_order_id, 
-//       razorpay_payment_id, 
-//       razorpay_signature, 
-//       toolId, 
-//       days 
-//     } = req.body;
-
-//     // 1. Verify Signature
-//     const body = razorpay_order_id + "|" + razorpay_payment_id;
-//     const expectedSignature = crypto
-//       .createHmac('sha256', key_secret)
-//       .update(body.toString())
-//       .digest('hex');
-
-//     if (expectedSignature !== razorpay_signature) {
-//       return res.status(400).json({ success: false, message: 'Invalid Payment Signature' });
-//     }
-
-//     // 2. Calculate Expiration Date
-//     const expiryDate = new Date();
-//     expiryDate.setDate(expiryDate.getDate() + parseInt(days));
-
-//     // 3. Update the Tool in Database
-//     const model = await Model.findOneAndUpdate(
-//       { _id: toolId, uploadedBy: req.user._id },
-//       { 
-//         featured: true,
-//         featuredExpiresAt: expiryDate,
-//         // Optional: Boost trending score
-//         $inc: { trendingScore: 50, categoryTrendingScore: 50 } 
-//       },
-//       { new: true }
-//     );
-
-//     if (!model) {
-//       return res.status(404).json({ success: false, message: 'Tool not found or you are not the owner' });
-//     }
-
-//     res.json({ 
-//       success: true, 
-//       message: `Tool boosted for ${days} days!`, 
-//       data: { model } 
-//     });
-
-//   } catch (error) {
-//     console.error('Boost Verification Error:', error);
-//     res.status(500).json({ success: false, message: 'Payment verification failed' });
-//   }
-// });
-
-// module.exports = router;
-
 const express = require('express');
 const router = express.Router();
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
 const User = require('../models/User');
 const Model = require('../models/Model');
-const Order = require('../models/Order'); // ✅ Import Order Model
-const PricingPlan = require('../models/PricingPlan'); // ✅ Import PricingPlan Model
+const Order = require('../models/Order'); 
+const PricingPlan = require('../models/PricingPlan');
 const { authenticateToken } = require('../middleware/auth');
 require('dotenv').config();
 
@@ -363,89 +14,401 @@ const key_secret = process.env.RAZORPAY_KEY_SECRET;
 
 const razorpay = new Razorpay({ key_id, key_secret });
 
-// --- CURRENCY CONVERSION CONFIGURATION ---
-const USD_TO_INR_RATE = 83; // Current approximate exchange rate
-const convertUSDToINR = (usdAmount) => {
-  return Math.round(usdAmount * USD_TO_INR_RATE);
+// Currency conversion rate USD to INR (should be updated regularly or fetched from API)
+const USD_TO_INR_RATE = 84; // Approximate rate, update as needed
+
+// Helper function to detect if user is from India
+const isUserFromIndia = (req) => {
+  // Check user's country from IP, user profile, or request headers
+  // For now, we'll check if user has INR preference or IP-based detection
+  const userAgent = req.headers['user-agent'] || '';
+  const acceptLanguage = req.headers['accept-language'] || '';
+  const countryHint = req.headers['cf-ipcountry'] || req.headers['x-country']; // Cloudflare or other proxy headers
+  
+  // You can also check user's saved preference in the database
+  return countryHint === 'IN' || acceptLanguage.includes('hi-IN') || acceptLanguage.includes('en-IN');
 };
 
-// Convert USD cents to INR paise (1 USD cent = 83 paise at current rate)
-const convertUSDCentsToINRPaise = (usdCents) => {
-  const usdDollars = usdCents / 100;
-  const inrRupees = convertUSDToINR(usdDollars);
-  return inrRupees * 100; // Convert to paise
-};
-
-// --- LEGACY CONFIGURATION: Subscription Plans (Fallback) ---
-const planAmountMap = {
-  free: 0,
-  monthly: 5 * 100,       // $5
-  six_months: 12 * 100,   // $12
-  annual: 20 * 100,       // $20
-  lifetime: 99 * 100,     // $99
-  'script-free': 0,       // $0
-  'script-creator': 5 * 100,  // $5
-  pro: 5 * 100,          // Legacy support
-  enterprise: 20 * 100   // Legacy support
+// Helper function to convert USD to INR cents for Razorpay
+const convertToPaymentCurrency = (usdAmount, isIndia) => {
+  if (isIndia) {
+    // Convert USD to INR and multiply by 100 for paise (smallest INR unit)
+    return Math.round(usdAmount * USD_TO_INR_RATE * 100);
+  } else {
+    // Keep in USD cents
+    return Math.round(usdAmount * 100);
+  }
 };
 
 // ==========================================
-// 1. SUBSCRIPTION FLOW
+// 1. CREATE ORDER FOR ANY PLAN
 // ==========================================
-
-// Create Order for Subscription
 router.post('/create-order', authenticateToken, async (req, res) => {
   try {
-    const { planId } = req.body;
+    const { planId, category } = req.body; // category can be 'store' or 'script-generator'
     
-    // Try to get amount from PricingPlan model first, fallback to legacy
-    let amount;
-    try {
-      amount = await PricingPlan.getPaymentAmount(planId);
-    } catch (error) {
-      console.log('PricingPlan lookup failed, using legacy planAmountMap');
-    }
+    console.log('🔍 [CREATE-ORDER] Request received:', { planId, category, userId: req.user._id });
     
-    // Fallback to legacy pricing if not found in database
-    if (!amount && amount !== 0) {
-      amount = planAmountMap[planId] ?? planAmountMap.pro;
+    // Get plan details from database
+    const plan = await PricingPlan.findOne({ planId, category, isActive: true });
+    console.log('🔍 [CREATE-ORDER] Plan lookup result:', plan);
+    
+    if (!plan) {
+      console.log('❌ [CREATE-ORDER] Plan not found:', { planId, category });
+      return res.status(400).json({ success: false, message: 'Invalid or inactive plan' });
     }
 
-    if (amount === null || amount === undefined) {
-      return res.status(400).json({ success: false, message: 'Invalid plan or plan not found' });
+    if (plan.priceUSD === 0) {
+      console.log('❌ [CREATE-ORDER] Free plan - should use activate-free-plan endpoint');
+      return res.status(400).json({ success: false, message: 'Free plans do not require payment' });
     }
 
-    // Convert USD cents to INR paise for Indian users
-    const amountInINRPaise = convertUSDCentsToINRPaise(amount);
+    console.log('💰 [CREATE-ORDER] Plan found, price:', plan.priceUSD);
+
+    const isIndia = isUserFromIndia(req);
+    const amount = convertToPaymentCurrency(plan.priceUSD, isIndia);
+    const currency = isIndia ? 'INR' : 'USD';
+
+    console.log('💱 [CREATE-ORDER] Currency conversion:', { isIndia, amount, currency, originalUSD: plan.priceUSD });
 
     const options = {
-      amount: amountInINRPaise,
-      currency: 'INR',
-      receipt: `sub_${Date.now()}`,
-      payment_capture: 1
+      amount,
+      currency,
+      receipt: `${category}_${planId}_${Date.now()}`,
+      payment_capture: 1,
+      notes: {
+        planId: plan.planId,
+        category: plan.category,
+        userId: req.user._id.toString(),
+        usdPrice: plan.priceUSD
+      }
     };
 
-    const order = await razorpay.orders.create(options);
-
-    // ✅ Optional: Save initial order state to DB
-    await Order.create({
-        userId: req.user._id,
-        planId: planId,
-        amount: amount / 100, // Store original USD amount for reference
-        amountINR: amountInINRPaise / 100, // Store INR amount
-        razorpayOrderId: order.id,
-        status: 'created'
+    console.log('📝 [CREATE-ORDER] Razorpay options:', options);
+    console.log('🔑 [CREATE-ORDER] Razorpay keys check:', { 
+      keyIdExists: !!key_id, 
+      keySecretExists: !!key_secret,
+      keyIdLength: key_id?.length,
+      keySecretLength: key_secret?.length 
     });
 
-    res.json({ success: true, order, key_id });
+    const order = await razorpay.orders.create(options);
+    console.log('✅ [CREATE-ORDER] Razorpay order created:', { orderId: order.id, amount: order.amount });
+
+    // Save order to database
+    const orderData = new Order({
+      userId: req.user._id,
+      planId: plan.planId,
+      category: plan.category,
+      amount: plan.priceUSD,
+      currency: 'USD', // We always store USD in our database for consistency
+      paymentCurrency: currency,
+      paymentAmount: amount,
+      razorpayOrderId: order.id,
+      status: 'created'
+    });
+
+    console.log('💾 [CREATE-ORDER] Saving order to database:', {
+      userId: req.user._id,
+      planId: plan.planId,
+      category: plan.category,
+      razorpayOrderId: order.id
+    });
+
+    await orderData.save();
+    console.log('✅ [CREATE-ORDER] Order saved to database successfully');
+
+    res.json({ 
+      success: true, 
+      order, 
+      key_id,
+      displayAmount: `$${plan.priceUSD}`,
+      actualCurrency: currency,
+      actualAmount: currency === 'INR' ? `₹${(amount / 100).toFixed(2)}` : `$${(amount / 100).toFixed(2)}`
+    });
 
   } catch (err) {
-    console.error('Subscription Order Error:', err);
-    res.status(500).json({ success: false, message: 'Failed to create subscription order' });
+    console.error('❌ [CREATE-ORDER] Error occurred:', err);
+    console.error('❌ [CREATE-ORDER] Error stack:', err.stack);
+    res.status(500).json({ success: false, message: 'Failed to create order', error: err.message });
   }
 });
 
-// GET /pricing-plans - Get active pricing plans for frontend
+// TEST ENDPOINT - Remove after debugging
+router.post('/test-create-order', async (req, res) => {
+  try {
+    console.log('🧪 [TEST] Testing order creation without auth...');
+    
+    const { planId, category } = req.body;
+    console.log('🧪 [TEST] Request body:', { planId, category });
+    
+    // Mock user ID for testing
+    const mockUserId = '507f1f77bcf86cd799439011'; // Valid ObjectId format
+    
+    const plan = await PricingPlan.findOne({ planId, category, isActive: true });
+    console.log('🧪 [TEST] Plan found:', !!plan);
+    
+    if (!plan) {
+      return res.status(400).json({ success: false, message: 'Plan not found' });
+    }
+    
+    const amount = Math.round(plan.priceUSD * 100);
+    const options = {
+      amount,
+      currency: 'USD',
+      receipt: `test_${Date.now()}`,
+      payment_capture: 1,
+      notes: { test: 'debug', planId, category }
+    };
+    
+    console.log('🧪 [TEST] Creating Razorpay order...');
+    const order = await razorpay.orders.create(options);
+    console.log('🧪 [TEST] Razorpay order created:', order.id);
+    
+    res.json({ 
+      success: true, 
+      message: 'Test order created successfully',
+      orderId: order.id,
+      amount: order.amount,
+      plan: { planId: plan.planId, price: plan.priceUSD }
+    });
+    
+  } catch (err) {
+    console.error('🧪 [TEST] Error:', err);
+    res.status(500).json({ success: false, message: 'Test failed', error: err.message });
+  }
+});
+
+// ==========================================
+// ACTIVATE FREE PLAN (No Payment Required)
+// ==========================================
+router.post('/activate-free-plan', authenticateToken, async (req, res) => {
+  try {
+    const { planId, category } = req.body;
+
+    // Get plan details from database
+    const plan = await PricingPlan.findOne({ planId, category, isActive: true, priceUSD: 0 });
+    if (!plan) {
+      return res.status(400).json({ success: false, message: 'Invalid free plan' });
+    }
+
+    // Update user subscription
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    // Calculate subscription end date
+    let endDate = new Date();
+    switch (plan.duration) {
+      case 'month':
+        endDate.setMonth(endDate.getMonth() + 1);
+        break;
+      case '6-months':
+        endDate.setMonth(endDate.getMonth() + 6);
+        break;
+      case 'year':
+        endDate.setFullYear(endDate.getFullYear() + 1);
+        break;
+      case 'lifetime':
+        endDate.setFullYear(endDate.getFullYear() + 100);
+        break;
+      default:
+        endDate.setMonth(endDate.getMonth() + 1);
+    }
+
+    if (category === 'script-generator') {
+      // Script Generator subscription
+      user.scriptGeneratorSubscription = {
+        planId: plan.planId,
+        status: 'active',
+        startDate: new Date(),
+        endDate: endDate,
+        isUnlimited: false,
+        usageCount: 0,
+        monthlyResetDate: new Date()
+      };
+    } else if (category === 'store') {
+      // Store listing subscription  
+      user.storeSubscription = {
+        planId: plan.planId,
+        status: 'active',
+        startDate: new Date(),
+        endDate: endDate,
+        listingType: plan.name
+      };
+    }
+
+    await user.save();
+
+    res.json({ 
+      success: true, 
+      message: `${category === 'script-generator' ? 'Script Generator' : 'Store'} free plan activated successfully!`,
+      data: { 
+        user: {
+          id: user._id,
+          scriptGeneratorSubscription: user.scriptGeneratorSubscription,
+          storeSubscription: user.storeSubscription
+        },
+        plan: plan.toFrontendFormat()
+      }
+    });
+
+  } catch (error) {
+    console.error('Free Plan Activation Error:', error);
+    res.status(500).json({ success: false, message: 'Failed to activate free plan' });
+  }
+});
+
+// ==========================================
+// 2. VERIFY PAYMENT & ACTIVATE SUBSCRIPTION
+// ==========================================
+router.post('/verify-payment', authenticateToken, async (req, res) => {
+  try {
+    const { 
+      razorpay_payment_id, 
+      razorpay_order_id, 
+      razorpay_signature,
+      planId,
+      category 
+    } = req.body;
+
+    // 1. Verify Payment Signature
+    const body = razorpay_order_id + "|" + razorpay_payment_id;
+    const expectedSignature = crypto
+      .createHmac('sha256', key_secret)
+      .update(body.toString())
+      .digest('hex');
+
+    if (expectedSignature !== razorpay_signature) {
+      return res.status(400).json({ success: false, message: 'Invalid payment signature' });
+    }
+
+    // 2. Get plan and order details
+    const plan = await PricingPlan.findOne({ planId, category, isActive: true });
+    const order = await Order.findOne({ razorpayOrderId: razorpay_order_id });
+
+    if (!plan || !order) {
+      return res.status(404).json({ success: false, message: 'Plan or order not found' });
+    }
+
+    // 3. Update order status
+    order.razorpayPaymentId = razorpay_payment_id;
+    order.status = 'completed';
+    await order.save();
+
+    // 4. Update user subscription based on category
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    // Calculate subscription end date based on plan duration
+    let endDate = new Date();
+    switch (plan.duration) {
+      case 'month':
+        endDate.setMonth(endDate.getMonth() + 1);
+        break;
+      case '6-months':
+        endDate.setMonth(endDate.getMonth() + 6);
+        break;
+      case 'year':
+        endDate.setFullYear(endDate.getFullYear() + 1);
+        break;
+      case 'lifetime':
+        endDate.setFullYear(endDate.getFullYear() + 100); // Far future date
+        break;
+      default:
+        endDate.setMonth(endDate.getMonth() + 1);
+    }
+
+    if (category === 'script-generator') {
+      // Script Generator subscription
+      user.scriptGeneratorSubscription = {
+        planId: plan.planId,
+        status: 'active',
+        startDate: new Date(),
+        endDate: endDate,
+        isUnlimited: plan.planId === 'script-creator'
+      };
+    } else if (category === 'store') {
+      // Store listing subscription
+      user.storeSubscription = {
+        planId: plan.planId,
+        status: 'active', 
+        startDate: new Date(),
+        endDate: endDate,
+        listingType: plan.name
+      };
+    }
+
+    await user.save();
+
+    res.json({ 
+      success: true, 
+      message: `${category === 'script-generator' ? 'Script Generator' : 'Store'} subscription activated successfully!`,
+      data: { 
+        user: {
+          id: user._id,
+          scriptGeneratorSubscription: user.scriptGeneratorSubscription,
+          storeSubscription: user.storeSubscription
+        },
+        plan: plan.toFrontendFormat()
+      }
+    });
+
+  } catch (error) {
+    console.error('Payment Verification Error:', error);
+    res.status(500).json({ success: false, message: 'Payment verification failed' });
+  }
+});
+
+// ==========================================
+// 3. GET USER SUBSCRIPTION STATUS
+// ==========================================
+router.get('/subscription-status', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select('scriptGeneratorSubscription storeSubscription');
+    
+    res.json({
+      success: true,
+      data: {
+        scriptGenerator: user.scriptGeneratorSubscription || { status: 'free' },
+        store: user.storeSubscription || { status: 'none' }
+      }
+    });
+
+  } catch (error) {
+    console.error('Subscription Status Error:', error);
+    res.status(500).json({ success: false, message: 'Failed to get subscription status' });
+  }
+});
+
+// ==========================================
+// 4. GET AVAILABLE PLANS BY CATEGORY
+// ==========================================
+router.get('/plans/:category', async (req, res) => {
+  try {
+    const { category } = req.params;
+    
+    if (!['store', 'script-generator'].includes(category)) {
+      return res.status(400).json({ success: false, message: 'Invalid category' });
+    }
+
+    const plans = await PricingPlan.getPlansByCategory(category);
+    const formattedPlans = plans.map(plan => plan.toFrontendFormat());
+
+    res.json({ success: true, data: formattedPlans });
+
+  } catch (error) {
+    console.error('Get Plans Error:', error);
+    res.status(500).json({ success: false, message: 'Failed to get plans' });
+  }
+});
+
+// ==========================================
+// 5. GET ALL PRICING PLANS (FOR FRONTEND)
+// ==========================================
 router.get('/pricing-plans', async (req, res) => {
   try {
     const { category } = req.query;
@@ -465,19 +428,22 @@ router.get('/pricing-plans', async (req, res) => {
       data: {
         plans: frontendPlans,
         categories: {
-          store: frontendPlans.filter(p => plans.find(original => original.planId === p.id && original.category === 'store')),
-          scriptGenerator: frontendPlans.filter(p => plans.find(original => original.planId === p.id && original.category === 'script-generator'))
+          store: frontendPlans.filter(p => {
+            const original = plans.find(original => original.planId === p.id);
+            return original && original.category === 'store';
+          }),
+          scriptGenerator: frontendPlans.filter(p => {
+            const original = plans.find(original => original.planId === p.id);
+            return original && original.category === 'script-generator';
+          })
         }
       }
     });
   } catch (error) {
-    console.error('Get pricing plans error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch pricing plans'
-    });
+    console.error('Get Pricing Plans Error:', error);
+    res.status(500).json({ success: false, message: 'Failed to get pricing plans' });
   }
-});
+    });
 
 // Complete/Verify Subscription
 router.post('/complete-subscription', authenticateToken, async (req, res) => {
@@ -598,18 +564,18 @@ router.post('/create-boost-order', authenticateToken, async (req, res) => {
   }
 });
 
-// ✅ Verify Boost Payment & Activate Feature
+// ✅ Verify Boost Payment & Activate Boost
 router.post('/verify-boost', authenticateToken, async (req, res) => {
   try {
     const { 
-      razorpay_order_id, 
       razorpay_payment_id, 
-      razorpay_signature, 
-      toolId, 
+      razorpay_order_id, 
+      razorpay_signature,
+      toolId,
       days 
     } = req.body;
 
-    // 1. Verify Signature
+    // 1. Verify Payment Signature
     const body = razorpay_order_id + "|" + razorpay_payment_id;
     const expectedSignature = crypto
       .createHmac('sha256', key_secret)
@@ -617,22 +583,29 @@ router.post('/verify-boost', authenticateToken, async (req, res) => {
       .digest('hex');
 
     if (expectedSignature !== razorpay_signature) {
-      return res.status(400).json({ success: false, message: 'Invalid Payment Signature' });
+      return res.status(400).json({ success: false, message: 'Invalid payment signature' });
     }
 
-    // 2. Calculate Expiration Date
-    const expiryDate = new Date();
-    expiryDate.setDate(expiryDate.getDate() + parseInt(days));
+    // 2. Get order details
+    const order = await Order.findOne({ razorpayOrderId: razorpay_order_id });
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
 
-    // 3. Update the Tool in Database
-    // Set 'isFeatured' to true and update expiration date
+    // 3. Update order status
+    order.razorpayPaymentId = razorpay_payment_id;
+    order.status = 'completed';
+    await order.save();
+
+    // 4. Boost the tool/model - update trending score and boost end date
     const model = await Model.findOneAndUpdate(
-      { _id: toolId, uploadedBy: req.user._id },
+      { _id: toolId, userId: req.user._id }, // Ensure user owns the tool
       { 
-        isFeatured: true, // Assuming your schema uses isFeatured or featured
-        featured: true,   // Setting both for compatibility
-        featuredExpiresAt: expiryDate,
-        $inc: { trendingScore: 50 * parseInt(days) } // Optional: Boost score based on days paid
+        $inc: { trendingScore: 50 * parseInt(days) }, // Optional: Boost score based on days paid
+        $set: { 
+          isBoosted: true,
+          boostEndDate: new Date(Date.now() + parseInt(days) * 24 * 60 * 60 * 1000) // Add boost days
+        }
       },
       { new: true }
     );
@@ -640,12 +613,6 @@ router.post('/verify-boost', authenticateToken, async (req, res) => {
     if (!model) {
       return res.status(404).json({ success: false, message: 'Tool not found or you are not the owner' });
     }
-
-    // ✅ 4. Update Order Status
-    await Order.findOneAndUpdate(
-        { razorpayOrderId: razorpay_order_id },
-        { status: 'paid', razorpayPaymentId: razorpay_payment_id }
-    );
 
     res.json({ 
       success: true, 
