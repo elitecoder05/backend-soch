@@ -337,6 +337,55 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET /api/models/:id/people-also-viewed - Recommend other models users viewed
+router.get('/:id/people-also-viewed', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { limit = 6 } = req.query;
+    const mongoose = require('mongoose');
+
+    // 1. Resolve model by id or slug
+    let model = null;
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      model = await Model.findById(id);
+    }
+    if (!model) {
+      model = await Model.findOne({ slug: id });
+    }
+    if (!model) return res.json({ success: true, data: { models: [] } });
+
+    // 2. Try to fetch models from same category first (exclude current)
+    const sameCategory = await Model.find({
+      _id: { $ne: model._id },
+      category: model.category,
+      status: 'approved'
+    })
+      .populate('uploadedBy', 'firstName lastName')
+      .sort({ trendingScore: -1, createdAt: -1 })
+      .limit(parseInt(limit));
+
+    // 3. If not enough, fill with other popular models
+    let results = sameCategory || [];
+    if (results.length < parseInt(limit)) {
+      const needed = parseInt(limit) - results.length;
+      const filler = await Model.find({
+        _id: { $nin: [model._id, ...results.map(r => r._id)] },
+        status: 'approved'
+      })
+        .populate('uploadedBy', 'firstName lastName')
+        .sort({ trendingScore: -1, createdAt: -1 })
+        .limit(needed);
+
+      results = results.concat(filler);
+    }
+
+    res.json({ success: true, data: { models: results } });
+  } catch (error) {
+    console.error('People also viewed error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // DELETE /api/models/:id - Delete a Model (User must own it)
 router.delete('/:id', authenticateToken, async (req, res) => {
   try {
