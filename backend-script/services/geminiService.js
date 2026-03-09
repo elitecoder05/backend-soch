@@ -21,6 +21,38 @@ const getGeminiClient = () => {
 };
 
 /**
+ * Validate the structure of the parsed script data
+ * @param {Object} data - The parsed JSON response
+ * @returns {Object} The validated data
+ * @throws {Error} If the structure is invalid
+ */
+const validateScriptStructure = (data) => {
+  const required = ['hook', 'body', 'cta', 'metadata', 'qualityScores'];
+  const missing = required.filter(field => !data[field]);
+  
+  if (missing.length > 0) {
+    throw new Error(`Missing required fields: ${missing.join(', ')}`);
+  }
+
+  // Validate hook structure
+  if (!data.hook.type || !data.hook.text) {
+    throw new Error('Hook must have both "type" and "text" properties');
+  }
+
+  // Validate body structure
+  if (!data.body.framework || !data.body.text) {
+    throw new Error('Body must have both "framework" and "text" properties');
+  }
+
+  // Validate CTA structure
+  if (typeof data.cta.included !== 'boolean') {
+    throw new Error('CTA "included" must be a boolean value');
+  }
+
+  return data;
+};
+
+/**
  * Build the complete prompt with user inputs + training context
  */
 const buildUserPrompt = ({
@@ -179,21 +211,65 @@ const generateScript = async (params) => {
     const response = result.response;
     const text = response.text();
 
+    console.log('[ScriptGen] Raw AI response length:', text.length);
+    console.log('[ScriptGen] Raw AI response preview:', text.substring(0, 150) + (text.length > 150 ? '...' : ''));
+
     // Parse the JSON response
     let scriptData;
     try {
       // Try direct JSON parse
       scriptData = JSON.parse(text);
     } catch (parseError) {
-      // Try to extract JSON from potential markdown wrapping
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        scriptData = JSON.parse(jsonMatch[0]);
-      } else {
-        console.error('[ScriptGen] Failed to parse response:', text.substring(0, 200));
-        throw new Error('AI response was not valid JSON. Please try again.');
+      console.error('[ScriptGen] Direct JSON parse failed:', parseError.message);
+      console.error('[ScriptGen] Raw response preview:', text.substring(0, 300));
+      
+      try {
+        // Try to extract JSON from potential markdown wrapping or multi-line format
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const extractedJson = jsonMatch[0];
+          console.log('[ScriptGen] Attempting to parse extracted JSON:', extractedJson.substring(0, 200));
+          scriptData = JSON.parse(extractedJson);
+        } else {
+          // Try to clean up common JSON formatting issues
+          let cleanedText = text.trim();
+          
+          // Remove markdown code blocks if present
+          cleanedText = cleanedText.replace(/^```json\s*/i, '').replace(/\s*```$/, '');
+          
+          // Remove any leading/trailing non-JSON content
+          const startBrace = cleanedText.indexOf('{');
+          const endBrace = cleanedText.lastIndexOf('}');
+          
+          if (startBrace !== -1 && endBrace !== -1 && endBrace > startBrace) {
+            cleanedText = cleanedText.substring(startBrace, endBrace + 1);
+            console.log('[ScriptGen] Attempting to parse cleaned JSON:', cleanedText.substring(0, 200));
+            scriptData = JSON.parse(cleanedText);
+          } else {
+            throw new Error('No valid JSON structure found in response');
+          }
+        }
+      } catch (secondParseError) {
+        console.error('[ScriptGen] All JSON parsing attempts failed');
+        console.error('[ScriptGen] Original error:', parseError.message);
+        console.error('[ScriptGen] Second attempt error:', secondParseError.message);
+        console.error('[ScriptGen] Full response text:', text);
+        
+        // Create a more detailed error message
+        let errorDetails = `AI returned invalid JSON. `;
+        if (parseError.message.includes('position')) {
+          errorDetails += `Parse error: ${parseError.message}. `;
+        }
+        errorDetails += `Response length: ${text.length} characters. `;
+        errorDetails += `Please try regenerating the script.`;
+        
+        throw new Error(errorDetails);
       }
     }
+
+    // Validate the structure of the parsed JSON
+    scriptData = validateScriptStructure(scriptData);
+    console.log('[ScriptGen] JSON structure validation passed');
 
     // Validate response structure
     if (!scriptData.hook || !scriptData.body) {
