@@ -256,16 +256,49 @@ router.get('/', async (req, res) => {
       filter.pricing = pricing;
     }
     
-    // ✅ IMPROVED: Enhanced search with better matching
+    // ✅ IMPROVED: Fuzzy search — handles spaces, camelCase, and multi-word queries
     if (search) {
-      filter.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { shortDescription: { $regex: search, $options: 'i' } },
-        { longDescription: { $regex: search, $options: 'i' } },
-        { provider: { $regex: search, $options: 'i' } },
-        { tags: { $in: [new RegExp(search, 'i')] } },
-        { category: { $regex: search, $options: 'i' } }
+      // Escape special regex characters to prevent injection
+      const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+      const trimmed = search.trim();
+      const safeSearch = escapeRegex(trimmed);
+      // Remove ALL spaces: "chat gpt" → "chatgpt" to match "ChatGPT"
+      const noSpace = escapeRegex(trimmed.replace(/\s+/g, ''));
+      // Individual words (length ≥ 2) for all-words-present matching
+      const words = trimmed.split(/\s+/).filter(w => w.length >= 2).map(escapeRegex);
+
+      const conditions = [
+        // 1. Exact phrase match (original query)
+        { name: { $regex: safeSearch, $options: 'i' } },
+        { shortDescription: { $regex: safeSearch, $options: 'i' } },
+        { longDescription: { $regex: safeSearch, $options: 'i' } },
+        { provider: { $regex: safeSearch, $options: 'i' } },
+        { tags: { $in: [new RegExp(safeSearch, 'i')] } },
+        { category: { $regex: safeSearch, $options: 'i' } },
       ];
+
+      // 2. No-space version: "chat gpt" → "chatgpt" matches "ChatGPT", "open ai" → "openai"
+      if (noSpace !== safeSearch && noSpace.length >= 2) {
+        conditions.push(
+          { name: { $regex: noSpace, $options: 'i' } },
+          { shortDescription: { $regex: noSpace, $options: 'i' } },
+          { provider: { $regex: noSpace, $options: 'i' } },
+          { tags: { $in: [new RegExp(noSpace, 'i')] } },
+        );
+      }
+
+      // 3. All-words lookahead: each word must appear somewhere in the field
+      //    "chat gpt" → (?=.*chat)(?=.*gpt) matches "ChatGPT Description"
+      if (words.length > 1) {
+        const allWordsPattern = words.map(w => `(?=.*${w})`).join('');
+        conditions.push(
+          { name: { $regex: allWordsPattern, $options: 'i' } },
+          { shortDescription: { $regex: allWordsPattern, $options: 'i' } },
+        );
+      }
+
+      filter.$or = conditions;
     }
 
     let models;
@@ -330,6 +363,65 @@ router.get('/', async (req, res) => {
       data: {
         models,
         pagination: { total, page: parseInt(page), pages: Math.ceil(total / limit) }
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// GET /api/models/search/suggestions - Quick search dropdown (must be before /:id)
+router.get('/search/suggestions', async (req, res) => {
+  try {
+    const { q, limit = 8 } = req.query;
+    if (!q || q.trim().length < 2) {
+      return res.json({ success: true, data: { suggestions: [], query: q || '' } });
+    }
+
+    const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const trimmed = q.trim();
+    const safeQ = escapeRegex(trimmed);
+    const noSpace = escapeRegex(trimmed.replace(/\s+/g, ''));
+    const words = trimmed.split(/\s+/).filter(w => w.length >= 2).map(escapeRegex);
+
+    const conditions = [
+      { name: { $regex: safeQ, $options: 'i' } },
+      { shortDescription: { $regex: safeQ, $options: 'i' } },
+      { provider: { $regex: safeQ, $options: 'i' } },
+      { tags: { $in: [new RegExp(safeQ, 'i')] } },
+    ];
+
+    if (noSpace !== safeQ && noSpace.length >= 2) {
+      conditions.push(
+        { name: { $regex: noSpace, $options: 'i' } },
+        { provider: { $regex: noSpace, $options: 'i' } },
+      );
+    }
+
+    if (words.length > 1) {
+      const allWordsPattern = words.map(w => `(?=.*${w})`).join('');
+      conditions.push({ name: { $regex: allWordsPattern, $options: 'i' } });
+    }
+
+    const suggestions = await Model.find({ status: 'approved', $or: conditions })
+      .select('name slug iconUrl shortDescription category provider pricing')
+      .sort({ trendingScore: -1, featured: -1 })
+      .limit(parseInt(limit));
+
+    res.json({
+      success: true,
+      data: {
+        suggestions: suggestions.map(m => ({
+          id: m._id,
+          name: m.name,
+          slug: m.slug,
+          iconUrl: m.iconUrl || null,
+          shortDescription: m.shortDescription,
+          category: m.category,
+          provider: m.provider,
+          pricing: m.pricing,
+        })),
+        query: trimmed,
       }
     });
   } catch (error) {
