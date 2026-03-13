@@ -510,6 +510,127 @@ router.delete('/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// GET /api/models/stats/count - Total model counts across all categories (public)
+router.get('/stats/count', async (req, res) => {
+  try {
+    const [total, approved, pending, rejected, byCategory] = await Promise.all([
+      Model.countDocuments({}),
+      Model.countDocuments({ status: 'approved' }),
+      Model.countDocuments({ status: 'pending' }),
+      Model.countDocuments({ status: 'rejected' }),
+      Model.aggregate([
+        {
+          $group: {
+            _id: '$category',
+            total: { $sum: 1 },
+            approved: { $sum: { $cond: [{ $eq: ['$status', 'approved'] }, 1, 0] } }
+          }
+        },
+        { $sort: { approved: -1 } }
+      ])
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        total,
+        approved,
+        pending,
+        rejected,
+        byCategory: byCategory.map(c => ({
+          category: c._id,
+          total: c.total,
+          approved: c.approved
+        }))
+      }
+    });
+  } catch (error) {
+    console.error('Stats count error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// GET /api/models/featured-for/:category - Get up to 2 actively boosted tools for a category
+// ⚠️ Must be defined BEFORE /:id to avoid conflict
+router.get('/featured-for/:category', async (req, res) => {
+  try {
+    const { category } = req.params;
+    const now = new Date();
+
+    const featured = await Model.find({
+      category,
+      status: 'approved',
+      featured: true,
+      featuredExpiresAt: { $gt: now }
+    })
+      .select('_id name slug shortDescription iconUrl category featured featuredExpiresAt')
+      .sort({ featuredExpiresAt: -1 })
+      .limit(2);
+
+    res.json({ success: true, data: { models: featured } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/models/:id/boost - Boost a model for N days (max 2 per category)
+router.post('/:id/boost', authenticateToken, async (req, res) => {
+  try {
+    const { days } = req.body;
+    const parsedDays = parseInt(days);
+
+    if (!parsedDays || parsedDays < 1 || parsedDays > 90) {
+      return res.status(400).json({ success: false, message: 'Boost duration must be between 1 and 90 days.' });
+    }
+
+    const mongoose = require('mongoose');
+    let model = null;
+    if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+      model = await Model.findOne({ _id: req.params.id, uploadedBy: req.user._id, status: 'approved' });
+    }
+    if (!model) {
+      model = await Model.findOne({ slug: req.params.id, uploadedBy: req.user._id, status: 'approved' });
+    }
+
+    if (!model) {
+      return res.status(404).json({ success: false, message: 'Model not found, not yet approved, or you do not own it.' });
+    }
+
+    // Check category limit: at most 2 actively boosted models per category (excluding this model)
+    const now = new Date();
+    const activeBoostedCount = await Model.countDocuments({
+      category: model.category,
+      featured: true,
+      featuredExpiresAt: { $gt: now },
+      _id: { $ne: model._id }
+    });
+
+    if (activeBoostedCount >= 2) {
+      return res.status(400).json({
+        success: false,
+        message: `Only 2 tools can be featured in the "${model.category}" category at a time. Please wait for an active boost to expire and try again.`
+      });
+    }
+
+    const boostEndDate = new Date(now.getTime() + parsedDays * 24 * 60 * 60 * 1000);
+
+    const updatedModel = await Model.findByIdAndUpdate(
+      model._id,
+      { $set: { featured: true, featuredExpiresAt: boostEndDate } },
+      { new: true }
+    );
+
+    res.json({
+      success: true,
+      message: `"${model.name}" is now featured for ${parsedDays} days!`,
+      data: { model: updatedModel, boostEndDate }
+    });
+  } catch (error) {
+    console.error('Boost model error:', error);
+    res.status(500).json({ success: false, message: 'Failed to boost model.' });
+  }
+});
+
 // GET /api/models/:id - Get Single Model Details (supports both ID and slug)
 router.get('/:id', async (req, res) => {
   try {
