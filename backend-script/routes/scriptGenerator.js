@@ -10,13 +10,13 @@ const { generateScript, regenerateSection } = require('../services/geminiService
 const { analyzeScript, updateCreatorStyleProfile, getCreatorStyleProfile } = require('../services/styleDetectionService');
 const CreatorStyleProfile = require('../../models/CreatorStyleProfile');
 const ScriptHistory = require('../../models/ScriptHistory');
-const { authenticateToken } = require('../../middleware/auth');
+const { authenticateTokenOptional } = require('../../middleware/auth');
 
 /**
  * POST /generate
  * 
  * Generates a video script based on user parameters.
- * REQUIRES AUTHENTICATION
+ * Authentication optional (guest generation allowed)
  * 
  * Body params:
  * - topic (required): The topic/subject of the script
@@ -37,15 +37,9 @@ const { authenticateToken } = require('../../middleware/auth');
  * - currentScript: object (optional, required when isFollowUp=true)
  * - sessionId: string (optional, for grouping scripts)
  */
-router.post('/generate', authenticateToken, async (req, res) => {
+router.post('/generate', authenticateTokenOptional, async (req, res) => {
   try {
     const userId = req.user?._id;
-    if (!userId) {
-      return res.status(401).json({
-        success: false,
-        error: 'User authentication required. Please log in.'
-      });
-    }
 
     const {
       topic,
@@ -150,20 +144,22 @@ router.post('/generate', authenticateToken, async (req, res) => {
       });
     }
 
-    console.log(`[API] Script generation request - User: ${userId} | Topic: "${topic.substring(0, 50)}..." | Duration: ${duration} | Language: ${language}`);
+    console.log(`[API] Script generation request - User: ${userId || 'guest'} | Topic: "${topic.substring(0, 50)}..." | Duration: ${duration} | Language: ${language}`);
 
     // STRICT: Fetch creator's style profile (if exists)
     let creatorProfile = null;
-    try {
-      creatorProfile = await getCreatorStyleProfile(userId);
-      if (creatorProfile) {
-        console.log('[API] ✅ Creator style profile loaded, status:', creatorProfile.profileStatus);
-      } else {
-        console.log('[API] No existing creator style profile found');
+    if (userId) {
+      try {
+        creatorProfile = await getCreatorStyleProfile(userId);
+        if (creatorProfile) {
+          console.log('[API] ✅ Creator style profile loaded, status:', creatorProfile.profileStatus);
+        } else {
+          console.log('[API] No existing creator style profile found');
+        }
+      } catch (profileError) {
+        console.warn('[API] Warning: Could not fetch creator profile:', profileError.message);
+        // Continue without profile - it will be created on first script
       }
-    } catch (profileError) {
-      console.warn('[API] Warning: Could not fetch creator profile:', profileError.message);
-      // Continue without profile - it will be created on first script
     }
 
     // Generate the script with creator style applied
@@ -190,6 +186,19 @@ router.post('/generate', authenticateToken, async (req, res) => {
     });
 
     console.log('[API] ✅ Script generated successfully');
+
+    // Guests can generate scripts but do not persist history/profile updates.
+    if (!userId) {
+      return res.status(200).json({
+        success: true,
+        data: scriptData,
+        metadata: {
+          sessionId,
+          persisted: false,
+          guestMode: true,
+        }
+      });
+    }
 
     // STRICT: Analyze the generated script and update creator profile
     try {
@@ -287,7 +296,7 @@ router.post('/generate', authenticateToken, async (req, res) => {
  * POST /regenerate-section
  * 
  * Regenerates a single section (hook | body | cta) of an existing script.
- * REQUIRES AUTHENTICATION
+ * Authentication optional (guest regeneration allowed)
  * 
  * Body params:
  * - section (required): 'hook' | 'body' | 'cta'
@@ -295,15 +304,9 @@ router.post('/generate', authenticateToken, async (req, res) => {
  * - currentScript (required): The full existing script result object
  * - instruction (optional): User's specific instruction for the rewrite
  */
-router.post('/regenerate-section', authenticateToken, async (req, res) => {
+router.post('/regenerate-section', authenticateTokenOptional, async (req, res) => {
   try {
     const userId = req.user?._id;
-    if (!userId) {
-      return res.status(401).json({
-        success: false,
-        error: 'User authentication required. Please log in.'
-      });
-    }
 
     const { section, params, currentScript, instruction = '' } = req.body;
 
@@ -327,10 +330,12 @@ router.post('/regenerate-section', authenticateToken, async (req, res) => {
 
     // STRICT: Fetch creator's style profile for consistency
     let creatorProfile = null;
-    try {
-      creatorProfile = await getCreatorStyleProfile(userId);
-    } catch (profileError) {
-      console.warn('[API] Could not fetch creator profile for section regeneration:', profileError.message);
+    if (userId) {
+      try {
+        creatorProfile = await getCreatorStyleProfile(userId);
+      } catch (profileError) {
+        console.warn('[API] Could not fetch creator profile for section regeneration:', profileError.message);
+      }
     }
 
     // Pass creatorProfile to the regeneration function

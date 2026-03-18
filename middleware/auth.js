@@ -117,4 +117,19 @@ const authenticateToken = async (req, res, next) => {
   }
 };
 
-module.exports = { authenticateToken };
+const authenticateTokenOptional = async (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  // For guest users, continue without attaching req.user.
+  if (!token) {
+    req.user = null;
+    req.token = null;
+    return next();
+  }
+
+  // Reuse strict auth flow when token is present.
+  return authenticateToken(req, res, next);
+};
+
+module.exports = { authenticateToken, authenticateTokenOptional };
