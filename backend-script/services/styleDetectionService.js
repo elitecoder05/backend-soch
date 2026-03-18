@@ -11,8 +11,8 @@
  * STRICT ENFORCEMENT: All detections have confidence thresholds
  */
 
-const CreatorStyleProfile = require('../models/CreatorStyleProfile');
-const ScriptHistory = require('../models/ScriptHistory');
+const CreatorStyleProfile = require('../../models/CreatorStyleProfile');
+const ScriptHistory = require('../../models/ScriptHistory');
 
 /**
  * STRICT Language Detection
