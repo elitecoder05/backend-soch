@@ -155,6 +155,96 @@ STRICT REQUIREMENTS (NON-NEGOTIABLE):
 CRITICAL: This script will be SPOKEN, not read. Make it conversational and natural like explaining to a friend.`;
 }
 
+const buildFollowUpPrompt = ({
+  topic,
+  followUpInstruction,
+  previousTopic,
+  currentScript,
+  duration,
+  customDuration,
+  language,
+  audience,
+  customAudience,
+  emotionalIntensity,
+  customIntensity,
+  tone,
+  ctaEnabled,
+  ctaType,
+  customCta,
+  referenceUrl,
+}) => {
+  let durationGuide = '';
+  let durationLabel = '';
+
+  if (duration === '30s') {
+    durationGuide = '90 words EXACTLY';
+    durationLabel = '30 seconds';
+  } else if (duration === '1min') {
+    durationGuide = '150 words EXACTLY';
+    durationLabel = '1 minute';
+  } else if (duration === 'custom' && customDuration) {
+    const minutes = parseFloat(customDuration);
+    const wordCount = Math.round(minutes * 150);
+    durationGuide = `${wordCount} words EXACTLY (${minutes} minutes)`;
+    durationLabel = `${customDuration} minutes`;
+  } else {
+    durationGuide = '150 words EXACTLY';
+    durationLabel = '1 minute';
+  }
+
+  const audienceLabel = audience === 'custom' ? (customAudience || 'General') : audience;
+  const intensityLabel = emotionalIntensity === 5
+    ? `Level 5 – Custom: ${customIntensity || 'High energy'}`
+    : `Level ${emotionalIntensity}`;
+
+  const ctaLabel = ctaEnabled
+    ? (ctaType === 'custom' ? (customCta || 'Custom CTA') : ctaType)
+    : 'Disabled';
+
+  const existingScript = {
+    hook: currentScript?.hook?.text || '',
+    body: currentScript?.body?.text || '',
+    cta: currentScript?.cta?.included ? (currentScript?.cta?.text || '') : '',
+  };
+
+  return `
+FOLLOW-UP MODE: CONTINUE THE SAME SCRIPT SESSION.
+
+Original topic of this session: ${previousTopic || topic}
+Follow-up user instruction: ${followUpInstruction}
+
+Current script to edit/improve:
+${JSON.stringify(existingScript, null, 2)}
+
+Session settings to preserve unless user asks to change them:
+- Duration: ${durationLabel} (${durationGuide})
+- Language: ${language}
+- Audience: ${audienceLabel}
+- Emotional Intensity: ${intensityLabel}
+- Tone: ${tone}
+- CTA: ${ctaLabel}
+- Reference URL: ${referenceUrl || 'none'}
+
+TASK:
+1. Do NOT start a new random script.
+2. Rewrite/improve the EXISTING script based on the follow-up instruction.
+3. Keep the same core topic unless follow-up explicitly asks to shift it.
+4. Keep structure coherent across hook, body, and CTA.
+5. Return the FULL updated script JSON in the exact schema.
+
+STRICT REQUIREMENTS (NON-NEGOTIABLE):
+- Apply natural speech filter: sentences max 12 words each
+- Write like talking to a friend, not writing an essay
+- Use ONLY 3 narrative frameworks: Micro Story, Problem→Insight→Shift, Open Loop Story
+- Hook: Maximum 12 words, maximum 2 lines, must sound like spoken language
+- Match word count EXACTLY to duration requirement
+- Never use prohibited words (NEVER mention: AI, human touch, psychological hooks, content strategy, algorithm, storytelling technique)
+- Output ONLY valid JSON as specified
+- Apply Layer 3 Natural Speech Filter to all content
+
+CRITICAL: This is a follow-up continuation in the same chat, not a fresh generation.`;
+};
+
 /**
  * Build few-shot context from training examples
  */
@@ -202,7 +292,8 @@ const generateScript = async (params) => {
       },
     });
 
-    const userPrompt = buildUserPrompt(params);
+    const isFollowUpMode = !!(params.isFollowUp && params.currentScript && params.followUpInstruction);
+    const userPrompt = isFollowUpMode ? buildFollowUpPrompt(params) : buildUserPrompt(params);
     const fewShotContext = buildFewShotContext();
     
     const fullPrompt = `${fewShotContext}\n\n${userPrompt}`;

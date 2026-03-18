@@ -26,6 +26,10 @@ const { generateScript, regenerateSection } = require('../services/geminiService
  * - ctaEnabled: boolean (default: false)
  * - ctaType: string (e.g., 'Follow for more', 'Subscribe', 'Comment', 'Save', 'custom')
  * - customCta: string (required if ctaType is 'custom')
+ * - isFollowUp: boolean (optional)
+ * - followUpInstruction: string (optional, required when isFollowUp=true)
+ * - previousTopic: string (optional)
+ * - currentScript: object (optional, required when isFollowUp=true)
  */
 router.post('/generate', async (req, res) => {
   try {
@@ -42,7 +46,11 @@ router.post('/generate', async (req, res) => {
       ctaEnabled = false,
       ctaType = 'Follow for more',
       customCta,
-      referenceUrl
+      referenceUrl,
+      isFollowUp = false,
+      followUpInstruction,
+      previousTopic,
+      currentScript,
     } = req.body;
 
     // Validate required field
@@ -65,6 +73,22 @@ router.post('/generate', async (req, res) => {
         success: false,
         error: 'Topic is too long. Please keep it under 500 characters.'
       });
+    }
+
+    if (isFollowUp) {
+      if (!followUpInstruction || String(followUpInstruction).trim().length < 2) {
+        return res.status(400).json({
+          success: false,
+          error: 'Follow-up instruction is required in follow-up mode.'
+        });
+      }
+
+      if (!currentScript || !currentScript.hook || !currentScript.body) {
+        return res.status(400).json({
+          success: false,
+          error: 'Current script context is required for follow-up mode.'
+        });
+      }
     }
 
     // Validate duration
@@ -126,7 +150,11 @@ router.post('/generate', async (req, res) => {
       ctaEnabled,
       ctaType,
       customCta,
-      referenceUrl
+      referenceUrl,
+      isFollowUp,
+      followUpInstruction,
+      previousTopic,
+      currentScript,
     });
 
     res.status(200).json({

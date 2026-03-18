@@ -7,13 +7,172 @@ const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
 
+const normalizeStringArray = (arr = []) => {
+  if (!Array.isArray(arr)) return [];
+  return [...new Set(arr.map((item) => String(item || '').trim()).filter(Boolean))];
+};
+
+const escapeRegex = (str = '') => String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const normalizeForSearch = (str = '') =>
+  String(str)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '');
+
+const tokenizeForSearch = (str = '') =>
+  String(str)
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+
+const isSubsequence = (source = '', target = '') => {
+  if (!source || !target) return false;
+  let i = 0;
+  let j = 0;
+  while (i < source.length && j < target.length) {
+    if (source[i] === target[j]) j++;
+    i++;
+  }
+  return j === target.length;
+};
+
+const boundedLevenshtein = (a = '', b = '', maxDistance = 2) => {
+  if (!a || !b) return Math.max(a.length, b.length);
+  if (Math.abs(a.length - b.length) > maxDistance) return maxDistance + 1;
+
+  const prev = new Array(b.length + 1);
+  const curr = new Array(b.length + 1);
+
+  for (let j = 0; j <= b.length; j++) prev[j] = j;
+
+  for (let i = 1; i <= a.length; i++) {
+    curr[0] = i;
+    let rowMin = curr[0];
+
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(
+        prev[j] + 1,
+        curr[j - 1] + 1,
+        prev[j - 1] + cost
+      );
+      if (curr[j] < rowMin) rowMin = curr[j];
+    }
+
+    if (rowMin > maxDistance) return maxDistance + 1;
+    for (let j = 0; j <= b.length; j++) prev[j] = curr[j];
+  }
+
+  return prev[b.length];
+};
+
+const buildSearchContext = (rawQuery = '') => {
+  const trimmed = String(rawQuery || '').trim();
+  const normalized = normalizeForSearch(trimmed);
+  const tokens = tokenizeForSearch(trimmed);
+  const safeTrimmed = escapeRegex(trimmed);
+  const safeNormalized = escapeRegex(normalized);
+
+  const conditions = [
+    { name: { $regex: safeTrimmed, $options: 'i' } },
+    { shortDescription: { $regex: safeTrimmed, $options: 'i' } },
+    { longDescription: { $regex: safeTrimmed, $options: 'i' } },
+    { provider: { $regex: safeTrimmed, $options: 'i' } },
+    { tags: { $in: [new RegExp(safeTrimmed, 'i')] } },
+    { category: { $regex: safeTrimmed, $options: 'i' } },
+  ];
+
+  if (normalized && normalized !== trimmed.toLowerCase()) {
+    conditions.push(
+      { name: { $regex: safeNormalized, $options: 'i' } },
+      { shortDescription: { $regex: safeNormalized, $options: 'i' } },
+      { provider: { $regex: safeNormalized, $options: 'i' } },
+      { tags: { $in: [new RegExp(safeNormalized, 'i')] } },
+    );
+  }
+
+  if (tokens.length > 1) {
+    const allWordsPattern = tokens.map((w) => `(?=.*${escapeRegex(w)})`).join('');
+    conditions.push(
+      { name: { $regex: allWordsPattern, $options: 'i' } },
+      { shortDescription: { $regex: allWordsPattern, $options: 'i' } },
+      { tags: { $in: [new RegExp(allWordsPattern, 'i')] } },
+    );
+  }
+
+  // Subsequence regex helps typo-like inputs such as "cht gpt" match "chatgpt".
+  if (normalized.length >= 4) {
+    const subsequencePattern = normalized.split('').map((ch) => escapeRegex(ch)).join('.*');
+    conditions.push(
+      { name: { $regex: subsequencePattern, $options: 'i' } },
+      { tags: { $in: [new RegExp(subsequencePattern, 'i')] } },
+    );
+  }
+
+  return {
+    raw: trimmed,
+    normalized,
+    tokens,
+    conditions,
+  };
+};
+
+const scoreModelAgainstSearch = (model, ctx) => {
+  if (!ctx || !ctx.normalized) return 0;
+
+  const name = String(model.name || '');
+  const nameLower = name.toLowerCase();
+  const nameNormalized = normalizeForSearch(name);
+
+  const providerLower = String(model.provider || '').toLowerCase();
+  const shortLower = String(model.shortDescription || '').toLowerCase();
+  const longLower = String(model.longDescription || '').toLowerCase();
+  const tags = Array.isArray(model.tags) ? model.tags.map((t) => String(t || '').toLowerCase()) : [];
+  const categoryLower = String(model.category || '').toLowerCase();
+
+  let score = 0;
+
+  // Strong name matching signals.
+  if (nameNormalized === ctx.normalized) score += 2500;
+  if (nameLower === ctx.raw.toLowerCase()) score += 1800;
+  if (nameNormalized.startsWith(ctx.normalized)) score += 1300;
+  if (nameNormalized.includes(ctx.normalized)) score += 1000;
+  if (isSubsequence(nameNormalized, ctx.normalized)) score += 700;
+
+  const typoDistance = boundedLevenshtein(nameNormalized, ctx.normalized, 2);
+  if (typoDistance <= 2) score += 650 - (typoDistance * 120);
+
+  if (ctx.tokens.length > 0 && ctx.tokens.every((t) => nameLower.includes(t))) score += 900;
+  if (ctx.tokens.length > 1 && ctx.tokens.some((t) => t.length >= 3 && nameLower.startsWith(t))) score += 180;
+
+  // Secondary fields.
+  if (providerLower.includes(ctx.raw.toLowerCase()) || normalizeForSearch(providerLower).includes(ctx.normalized)) score += 220;
+  if (shortLower.includes(ctx.raw.toLowerCase())) score += 170;
+  if (longLower.includes(ctx.raw.toLowerCase())) score += 120;
+  if (categoryLower.includes(ctx.raw.toLowerCase())) score += 90;
+
+  const tagExact = tags.some((t) => normalizeForSearch(t) === ctx.normalized);
+  const tagContains = tags.some((t) => normalizeForSearch(t).includes(ctx.normalized));
+  if (tagExact) score += 460;
+  else if (tagContains) score += 260;
+
+  // Keep business signals as tie-breakers, not primary rank.
+  if (model.hasCustomCampaign) score += 35;
+  if (model.featured) score += 30;
+  if (model.isSponsored) score += 25;
+  score += Math.min(25, Number(model.trendingScore || 0) * 0.2);
+  score += Math.min(12, Number(model.rating || 0) * 2);
+
+  return score;
+};
+
 // --- Validation Schemas ---
 const modelSchema = Joi.object({
   name: Joi.string().trim().max(100).required(),
   shortDescription: Joi.string().trim().max(200).required(),
   longDescription: Joi.string().trim().max(2000).allow(''),
   category: Joi.string().required(),
-  tags: Joi.array().items(Joi.string().max(30)).default([]),
+  tags: Joi.array().items(Joi.string().trim().max(30)).default([]),
   provider: Joi.string().trim().max(50).required(),
   pricing: Joi.string().valid('free', 'freemium', 'paid').default('freemium'),
   capabilities: Joi.array().items(Joi.string()).default([]),
@@ -165,6 +324,7 @@ router.post('/', authenticateToken, async (req, res) => {
     // 2. Validate
     const { error, value } = modelSchema.validate(req.body);
     if (error) return res.status(400).json({ success: false, message: error.details[0].message });
+    value.tags = normalizeStringArray(value.tags);
 
     // 3. Duplicate Check
     const existingModel = await Model.findOne({ name: value.name, uploadedBy: req.user._id });
@@ -194,6 +354,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
     // 1. Validate Input
     const { error, value } = modelSchema.validate(req.body);
     if (error) return res.status(400).json({ success: false, message: error.details[0].message });
+    value.tags = normalizeStringArray(value.tags);
 
     // 2. Find the model and verify ownership
     const model = await Model.findOne({ _id: req.params.id, uploadedBy: req.user._id });
@@ -231,7 +392,9 @@ router.put('/:id', authenticateToken, async (req, res) => {
 router.get('/', async (req, res) => {
   try {
     const { category, search, pricing, page = 1, limit = 20, randomize } = req.query;
-    const skip = (page - 1) * limit;
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = parseInt(limit, 10) || 20;
+    const skip = (pageNum - 1) * limitNum;
 
     // Category alias mapping for backward compatibility
     const CATEGORY_ALIASES = {
@@ -256,55 +419,17 @@ router.get('/', async (req, res) => {
       filter.pricing = pricing;
     }
     
-    // ✅ IMPROVED: Fuzzy search — handles spaces, camelCase, and multi-word queries
-    if (search) {
-      // Escape special regex characters to prevent injection
-      const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const hasSearch = typeof search === 'string' && search.trim().length >= 2;
+    const searchCtx = hasSearch ? buildSearchContext(search) : null;
 
-      const trimmed = search.trim();
-      const safeSearch = escapeRegex(trimmed);
-      // Remove ALL spaces: "chat gpt" → "chatgpt" to match "ChatGPT"
-      const noSpace = escapeRegex(trimmed.replace(/\s+/g, ''));
-      // Individual words (length ≥ 2) for all-words-present matching
-      const words = trimmed.split(/\s+/).filter(w => w.length >= 2).map(escapeRegex);
-
-      const conditions = [
-        // 1. Exact phrase match (original query)
-        { name: { $regex: safeSearch, $options: 'i' } },
-        { shortDescription: { $regex: safeSearch, $options: 'i' } },
-        { longDescription: { $regex: safeSearch, $options: 'i' } },
-        { provider: { $regex: safeSearch, $options: 'i' } },
-        { tags: { $in: [new RegExp(safeSearch, 'i')] } },
-        { category: { $regex: safeSearch, $options: 'i' } },
-      ];
-
-      // 2. No-space version: "chat gpt" → "chatgpt" matches "ChatGPT", "open ai" → "openai"
-      if (noSpace !== safeSearch && noSpace.length >= 2) {
-        conditions.push(
-          { name: { $regex: noSpace, $options: 'i' } },
-          { shortDescription: { $regex: noSpace, $options: 'i' } },
-          { provider: { $regex: noSpace, $options: 'i' } },
-          { tags: { $in: [new RegExp(noSpace, 'i')] } },
-        );
-      }
-
-      // 3. All-words lookahead: each word must appear somewhere in the field
-      //    "chat gpt" → (?=.*chat)(?=.*gpt) matches "ChatGPT Description"
-      if (words.length > 1) {
-        const allWordsPattern = words.map(w => `(?=.*${w})`).join('');
-        conditions.push(
-          { name: { $regex: allWordsPattern, $options: 'i' } },
-          { shortDescription: { $regex: allWordsPattern, $options: 'i' } },
-        );
-      }
-
-      filter.$or = conditions;
+    if (searchCtx) {
+      filter.$or = searchCtx.conditions;
     }
 
     let models;
     
     // ✅ IMPROVED RANKING LOGIC: Prioritize based on multiple factors
-    if (randomize === 'true' && !search) {
+    if (randomize === 'true' && !hasSearch) {
       // For homepage: show sponsored/featured first, then randomized
       const priorityModels = await Model.find({ 
         ...filter, 
@@ -320,17 +445,19 @@ router.get('/', async (req, res) => {
             isSponsored: { $ne: true }
           } 
         },
-        { $sample: { size: parseInt(limit) } }
+        { $sample: { size: limitNum } }
       ]);
       
       await Model.populate(regularModels, { path: 'uploadedBy', select: 'firstName lastName' });
-      models = [...priorityModels, ...regularModels].slice(skip, skip + parseInt(limit));
+      models = [...priorityModels, ...regularModels].slice(skip, skip + limitNum);
     } else {
-      // ✅ SMART RANKING: Category match > Tags > Popularity > Sponsored > Recent
-      // For searches, use scoring-based ranking
-      const sortOptions = search 
-        ? { 
-            // Search results: prioritize exact category match, then popularity
+      if (searchCtx) {
+        // For search, pull a larger candidate set and rank by textual relevance first.
+        const candidateFetchSize = Math.min(2500, Math.max(250, skip + (limitNum * 20)));
+
+        const candidates = await Model.find(filter)
+          .populate('uploadedBy', 'firstName lastName')
+          .sort({
             hasCustomCampaign: -1,
             featured: -1,
             isSponsored: -1,
@@ -338,22 +465,40 @@ router.get('/', async (req, res) => {
             categoryTrendingScore: -1,
             rating: -1,
             reviewsCount: -1,
-            createdAt: -1
-          }
-        : {
-            // Category/filter results: sponsored > trending > recent
+            createdAt: -1,
+          })
+          .limit(candidateFetchSize);
+
+        models = candidates
+          .map((m) => ({ model: m, searchScore: scoreModelAgainstSearch(m, searchCtx) }))
+          .sort((a, b) => {
+            if (b.searchScore !== a.searchScore) return b.searchScore - a.searchScore;
+            if ((b.model.hasCustomCampaign ? 1 : 0) !== (a.model.hasCustomCampaign ? 1 : 0)) {
+              return (b.model.hasCustomCampaign ? 1 : 0) - (a.model.hasCustomCampaign ? 1 : 0);
+            }
+            if ((b.model.featured ? 1 : 0) !== (a.model.featured ? 1 : 0)) {
+              return (b.model.featured ? 1 : 0) - (a.model.featured ? 1 : 0);
+            }
+            if ((b.model.isSponsored ? 1 : 0) !== (a.model.isSponsored ? 1 : 0)) {
+              return (b.model.isSponsored ? 1 : 0) - (a.model.isSponsored ? 1 : 0);
+            }
+            return new Date(b.model.createdAt).getTime() - new Date(a.model.createdAt).getTime();
+          })
+          .slice(skip, skip + limitNum)
+          .map(({ model }) => model);
+      } else {
+        models = await Model.find(filter)
+          .populate('uploadedBy', 'firstName lastName')
+          .sort({
             hasCustomCampaign: -1,
             featured: -1,
             isSponsored: -1,
             trendingScore: -1,
-            createdAt: -1
-          };
-      
-      models = await Model.find(filter)
-        .populate('uploadedBy', 'firstName lastName')
-        .sort(sortOptions)
-        .skip(skip)
-        .limit(parseInt(limit));
+            createdAt: -1,
+          })
+          .skip(skip)
+          .limit(limitNum);
+      }
     }
 
     const total = await Model.countDocuments(filter);
@@ -362,7 +507,7 @@ router.get('/', async (req, res) => {
       success: true,
       data: {
         models,
-        pagination: { total, page: parseInt(page), pages: Math.ceil(total / limit) }
+        pagination: { total, page: pageNum, pages: Math.ceil(total / limitNum) }
       }
     });
   } catch (error) {
@@ -378,35 +523,22 @@ router.get('/search/suggestions', async (req, res) => {
       return res.json({ success: true, data: { suggestions: [], query: q || '' } });
     }
 
-    const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const trimmed = q.trim();
-    const safeQ = escapeRegex(trimmed);
-    const noSpace = escapeRegex(trimmed.replace(/\s+/g, ''));
-    const words = trimmed.split(/\s+/).filter(w => w.length >= 2).map(escapeRegex);
+    const limitNum = parseInt(limit, 10) || 8;
+    const searchCtx = buildSearchContext(q);
 
-    const conditions = [
-      { name: { $regex: safeQ, $options: 'i' } },
-      { shortDescription: { $regex: safeQ, $options: 'i' } },
-      { provider: { $regex: safeQ, $options: 'i' } },
-      { tags: { $in: [new RegExp(safeQ, 'i')] } },
-    ];
-
-    if (noSpace !== safeQ && noSpace.length >= 2) {
-      conditions.push(
-        { name: { $regex: noSpace, $options: 'i' } },
-        { provider: { $regex: noSpace, $options: 'i' } },
-      );
-    }
-
-    if (words.length > 1) {
-      const allWordsPattern = words.map(w => `(?=.*${w})`).join('');
-      conditions.push({ name: { $regex: allWordsPattern, $options: 'i' } });
-    }
-
-    const suggestions = await Model.find({ status: 'approved', $or: conditions })
+    const suggestionCandidates = await Model.find({ status: 'approved', $or: searchCtx.conditions })
       .select('name slug iconUrl shortDescription category provider pricing')
-      .sort({ trendingScore: -1, featured: -1 })
-      .limit(parseInt(limit));
+      .sort({ hasCustomCampaign: -1, featured: -1, isSponsored: -1, trendingScore: -1, createdAt: -1 })
+      .limit(120);
+
+    const suggestions = suggestionCandidates
+      .map((m) => ({ model: m, searchScore: scoreModelAgainstSearch(m, searchCtx) }))
+      .sort((a, b) => {
+        if (b.searchScore !== a.searchScore) return b.searchScore - a.searchScore;
+        return (b.model.trendingScore || 0) - (a.model.trendingScore || 0);
+      })
+      .slice(0, limitNum)
+      .map(({ model }) => model);
 
     res.json({
       success: true,
