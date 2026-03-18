@@ -13,6 +13,26 @@ const scriptHistorySchema = new mongoose.Schema({
     trim: true,
     maxlength: 500,
   },
+  sessionId: {
+    type: String,
+    required: true,
+    trim: true,
+    index: true,
+  },
+  turnNumber: {
+    type: Number,
+    default: 1,
+    min: 1,
+  },
+  userPrompt: {
+    type: String,
+    trim: true,
+    maxlength: 1000,
+  },
+  isFollowUp: {
+    type: Boolean,
+    default: false,
+  },
   params: {
     duration: String,
     customDuration: Number,
@@ -62,5 +82,6 @@ const scriptHistorySchema = new mongoose.Schema({
 
 // Compound index for efficient user-specific queries sorted by date
 scriptHistorySchema.index({ userId: 1, createdAt: -1 });
+scriptHistorySchema.index({ userId: 1, sessionId: 1, turnNumber: 1 });
 
 module.exports = mongoose.model('ScriptHistory', scriptHistorySchema);
