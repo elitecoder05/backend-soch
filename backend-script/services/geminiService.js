@@ -53,10 +53,79 @@ const validateScriptStructure = (data) => {
 };
 
 /**
+ * STRICT: Build style enforcement instructions from creator profile
+ * These are MANDATORY restrictions that MUST be applied
+ */
+const buildCreatorStyleEnforcement = (creatorProfile) => {
+  if (!creatorProfile) {
+    return '';
+  }
+
+  let styleEnforcement = '\n\n=== STRICT CREATOR STYLE RESTRICTIONS (MANDATORY) ===\n';
+
+  // STRICT: Language enforcement
+  if (creatorProfile.language.primary && creatorProfile.language.confidence > 0.7) {
+    styleEnforcement += `LANGUAGE RESTRICTION: This creator ALWAYS writes in ${creatorProfile.language.primary}. DO NOT deviate or mix languages.\n`;
+  }
+
+  // STRICT: Sentence length enforcement
+  if (creatorProfile.sentenceStructure.averageLength > 0) {
+    const avgLen = Math.round(creatorProfile.sentenceStructure.averageLength);
+    const minLen = Math.max(3, creatorProfile.sentenceStructure.minLength - 2);
+    const maxLen = Math.min(50, creatorProfile.sentenceStructure.maxLength + 2);
+    styleEnforcement += `SENTENCE LENGTH: Average ${avgLen} words. Keep between ${minLen}-${maxLen} words per sentence.\n`;
+  }
+
+  // STRICT: Tone enforcement
+  if (creatorProfile.tone.primary && creatorProfile.tone.confidence > 0.6) {
+    styleEnforcement += `TONE LOCK: Generate ONLY in "${creatorProfile.tone.primary}" tone. Do NOT use different tones.\n`;
+  }
+
+  // STRICT: Common phrases enforcement
+  if (creatorProfile.commonPhrases.length > 0) {
+    const topPhrases = creatorProfile.commonPhrases.slice(0, 5).map((p) => `"${p.phrase}"`).join(', ');
+    styleEnforcement += `SIGNATURE PHRASES: Incorporate AT LEAST 2 of these creator signatures: ${topPhrases}\n`;
+  }
+
+  // STRICT: Writing pattern enforcement
+  const patterns = [];
+  if (creatorProfile.writingPatterns.usesContractions) {
+    patterns.push("use contractions (don't, can't, won't)");
+  }
+  if (creatorProfile.writingPatterns.usesColloquialisms) {
+    patterns.push("use casual language");
+  }
+  if (creatorProfile.writingPatterns.usesQuestions) {
+    patterns.push("use rhetorical questions");
+  }
+  if (patterns.length > 0) {
+    styleEnforcement += `WRITING STYLE: Always ${patterns.join(', ')}.\n`;
+  }
+
+  // STRICT: Emotional intensity enforcement
+  if (creatorProfile.emotionalIntensity.average > 0) {
+    const intensityLevel = creatorProfile.emotionalIntensity.average;
+    const minIntensity = Math.max(1, intensityLevel - 1);
+    const maxIntensity = Math.min(5, intensityLevel + 1);
+    styleEnforcement += `EMOTIONAL INTENSITY RANGE: Keep between level ${minIntensity}-${maxIntensity} (creator's average is ${intensityLevel}). RESPECT this range strictly.\n`;
+  }
+
+  // STRICT: Audience handling
+  if (creatorProfile.preferredAudience.primary) {
+    styleEnforcement += `PRIMARY AUDIENCE: ${creatorProfile.preferredAudience.primary}. Tailor language and examples accordingly.\n`;
+  }
+
+  styleEnforcement += '=== END CREATOR STYLE RESTRICTIONS ===\n';
+
+  return styleEnforcement;
+};
+
+/**
  * Build the complete prompt with user inputs + training context
  */
 const buildUserPrompt = ({
   topic,
+  detailedInstructions,
   duration,
   customDuration,
   language,
@@ -68,7 +137,8 @@ const buildUserPrompt = ({
   ctaEnabled,
   ctaType,
   customCta,
-  referenceUrl
+  referenceUrl,
+  creatorProfile
 }) => {
   // STRICT word count control as per training instructions
   let durationGuide = '';
@@ -130,16 +200,31 @@ FOLLOW THESE STEPS:
 Your script must have the same STYLE and STRUCTURE as the reference but different content.`;
   }
 
+  // Build detailed instructions section
+  let detailedInstructionsSection = '';
+  if (detailedInstructions && detailedInstructions.trim().length > 0) {
+    detailedInstructionsSection = `
+
+USER'S DETAILED INSTRUCTIONS:
+${detailedInstructions}
+
+CRITICAL: The above detailed instructions MUST significantly influence the script structure, tone, style, and content. These are user-specified requirements that take priority in shaping the output.`;
+  }
+
+  // STRICT: Add creator style enforcement
+  const styleEnforcement = buildCreatorStyleEnforcement(creatorProfile);
+
   return `
 Generate a script strictly following training instructions for:
 
 TOPIC: ${topic}
+${detailedInstructions ? `DETAILED INSTRUCTIONS: The user has provided specific instructions below that MUST be incorporated.` : ''}
 DURATION: ${durationLabel} (Word count: ${durationGuide})
 LANGUAGE: ${language}
 AUDIENCE: ${audienceLabel}
 EMOTIONAL INTENSITY: ${intensityLabel}
 TONE: ${tone}
-${ctaInstruction}${referenceInstruction}
+${ctaInstruction}${referenceInstruction}${detailedInstructionsSection}
 
 STRICT REQUIREMENTS (NON-NEGOTIABLE):
 - Apply natural speech filter: sentences max 12 words each
@@ -151,12 +236,13 @@ STRICT REQUIREMENTS (NON-NEGOTIABLE):
 - Output ONLY valid JSON as specified
 - Apply Layer 3 Natural Speech Filter to all content
 - Break long sentences into shorter ones (max 12 words per sentence)
-
+${styleEnforcement}
 CRITICAL: This script will be SPOKEN, not read. Make it conversational and natural like explaining to a friend.`;
 }
 
 const buildFollowUpPrompt = ({
   topic,
+  detailedInstructions,
   followUpInstruction,
   previousTopic,
   currentScript,
@@ -172,6 +258,7 @@ const buildFollowUpPrompt = ({
   ctaType,
   customCta,
   referenceUrl,
+  creatorProfile
 }) => {
   let durationGuide = '';
   let durationLabel = '';
@@ -207,11 +294,26 @@ const buildFollowUpPrompt = ({
     cta: currentScript?.cta?.included ? (currentScript?.cta?.text || '') : '',
   };
 
+  // Build detailed instructions section
+  let detailedInstructionsSection = '';
+  if (detailedInstructions && detailedInstructions.trim().length > 0) {
+    detailedInstructionsSection = `
+
+PERSISTENT USER INSTRUCTIONS:
+${detailedInstructions}
+
+CRITICAL: These user-specified instructions continue to apply and MUST be incorporated into the follow-up version.`;
+  }
+
+  // STRICT: Add creator style enforcement
+  const styleEnforcement = buildCreatorStyleEnforcement(creatorProfile);
+
   return `
 FOLLOW-UP MODE: CONTINUE THE SAME SCRIPT SESSION.
 
 Original topic of this session: ${previousTopic || topic}
 Follow-up user instruction: ${followUpInstruction}
+${detailedInstructions ? `User's detailed instructions: The following detailed instructions MUST continue to influence the script.` : ''}
 
 Current script to edit/improve:
 ${JSON.stringify(existingScript, null, 2)}
@@ -224,6 +326,7 @@ Session settings to preserve unless user asks to change them:
 - Tone: ${tone}
 - CTA: ${ctaLabel}
 - Reference URL: ${referenceUrl || 'none'}
+${detailedInstructionsSection}
 
 TASK:
 1. Do NOT start a new random script.
@@ -241,7 +344,7 @@ STRICT REQUIREMENTS (NON-NEGOTIABLE):
 - Never use prohibited words (NEVER mention: AI, human touch, psychological hooks, content strategy, algorithm, storytelling technique)
 - Output ONLY valid JSON as specified
 - Apply Layer 3 Natural Speech Filter to all content
-
+${styleEnforcement}
 CRITICAL: This is a follow-up continuation in the same chat, not a fresh generation.`;
 };
 

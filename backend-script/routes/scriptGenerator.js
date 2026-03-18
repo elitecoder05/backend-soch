@@ -7,11 +7,16 @@
 const express = require('express');
 const router = express.Router();
 const { generateScript, regenerateSection } = require('../services/geminiService');
+const { analyzeScript, updateCreatorStyleProfile, getCreatorStyleProfile } = require('../services/styleDetectionService');
+const CreatorStyleProfile = require('../../models/CreatorStyleProfile');
+const ScriptHistory = require('../../models/ScriptHistory');
+const { authenticateToken } = require('../../middleware/auth');
 
 /**
  * POST /generate
  * 
  * Generates a video script based on user parameters.
+ * REQUIRES AUTHENTICATION
  * 
  * Body params:
  * - topic (required): The topic/subject of the script
@@ -30,11 +35,21 @@ const { generateScript, regenerateSection } = require('../services/geminiService
  * - followUpInstruction: string (optional, required when isFollowUp=true)
  * - previousTopic: string (optional)
  * - currentScript: object (optional, required when isFollowUp=true)
+ * - sessionId: string (optional, for grouping scripts)
  */
-router.post('/generate', async (req, res) => {
+router.post('/generate', authenticateToken, async (req, res) => {
   try {
+    const userId = req.user?._id;
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: 'User authentication required. Please log in.'
+      });
+    }
+
     const {
       topic,
+      detailedInstructions,
       duration = '1min',
       customDuration,
       language = 'English',
@@ -51,6 +66,7 @@ router.post('/generate', async (req, res) => {
       followUpInstruction,
       previousTopic,
       currentScript,
+      sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
     } = req.body;
 
     // Validate required field
@@ -134,11 +150,26 @@ router.post('/generate', async (req, res) => {
       });
     }
 
-    console.log(`[API] Script generation request - Topic: "${topic.substring(0, 50)}..." | Duration: ${duration} | Language: ${language}`);
+    console.log(`[API] Script generation request - User: ${userId} | Topic: "${topic.substring(0, 50)}..." | Duration: ${duration} | Language: ${language}`);
 
-    // Generate the script
+    // STRICT: Fetch creator's style profile (if exists)
+    let creatorProfile = null;
+    try {
+      creatorProfile = await getCreatorStyleProfile(userId);
+      if (creatorProfile) {
+        console.log('[API] ✅ Creator style profile loaded, status:', creatorProfile.profileStatus);
+      } else {
+        console.log('[API] No existing creator style profile found');
+      }
+    } catch (profileError) {
+      console.warn('[API] Warning: Could not fetch creator profile:', profileError.message);
+      // Continue without profile - it will be created on first script
+    }
+
+    // Generate the script with creator style applied
     const scriptData = await generateScript({
       topic: topic.trim(),
+      detailedInstructions: detailedInstructions?.trim(),
       duration,
       customDuration,
       language,
@@ -155,12 +186,88 @@ router.post('/generate', async (req, res) => {
       followUpInstruction,
       previousTopic,
       currentScript,
+      creatorProfile // Pass the creator's style profile for STRICT enforcement
     });
 
-    res.status(200).json({
-      success: true,
-      data: scriptData
-    });
+    console.log('[API] ✅ Script generated successfully');
+
+    // STRICT: Analyze the generated script and update creator profile
+    try {
+      const scriptAnalysis = analyzeScript(scriptData, {
+        language,
+        tone,
+        emotionalIntensity: intensity,
+        audience
+      });
+
+      console.log('[API] ✅ Script analysis complete');
+
+      // Get the next turn number for this session
+      const latestTurn = await ScriptHistory.findOne({
+        userId,
+        sessionId,
+      })
+        .sort({ turnNumber: -1 })
+        .select('turnNumber')
+        .lean();
+
+      const nextTurnNumber = (latestTurn?.turnNumber || 0) + 1;
+
+      // Save to ScriptHistory with correct turn number
+      const scriptHistoryRecord = new ScriptHistory({
+        userId,
+        topic: topic.trim(),
+        sessionId,
+        turnNumber: nextTurnNumber,
+        userPrompt: isFollowUp ? followUpInstruction : topic,
+        isFollowUp,
+        params: {
+          detailedInstructions: detailedInstructions?.trim(),
+          duration,
+          customDuration,
+          language,
+          audience,
+          customAudience,
+          emotionalIntensity: intensity,
+          customIntensity,
+          tone,
+          ctaEnabled,
+          ctaType,
+          customCta,
+        },
+        result: scriptData
+      });
+
+      const savedHistory = await scriptHistoryRecord.save();
+      console.log('[API] ✅ Script history saved:', savedHistory._id, 'Turn:', nextTurnNumber);
+
+      // Update creator style profile with the script analysis
+      const updatedProfile = await updateCreatorStyleProfile(userId, scriptAnalysis, savedHistory._id);
+      console.log('[API] ✅ Creator style profile updated, new status:', updatedProfile.profileStatus);
+
+      // Return with profile status
+      res.status(200).json({
+        success: true,
+        data: scriptData,
+        metadata: {
+          historyId: savedHistory._id,
+          sessionId: sessionId,
+          turnNumber: nextTurnNumber,
+          profileStatus: updatedProfile.profileStatus,
+          totalScriptsAnalyzed: updatedProfile.totalScriptsAnalyzed
+        }
+      });
+    } catch (analysisError) {
+      console.error('[API] Warning: Could not update creator profile:', analysisError.message);
+      // Return the script anyway, but without profile metadata
+      res.status(200).json({
+        success: true,
+        data: scriptData,
+        metadata: {
+          warning: 'Script generated but profile update failed'
+        }
+      });
+    }
 
   } catch (error) {
     console.error('[API] Script generation error:', error.message);
@@ -180,6 +287,7 @@ router.post('/generate', async (req, res) => {
  * POST /regenerate-section
  * 
  * Regenerates a single section (hook | body | cta) of an existing script.
+ * REQUIRES AUTHENTICATION
  * 
  * Body params:
  * - section (required): 'hook' | 'body' | 'cta'
@@ -187,8 +295,16 @@ router.post('/generate', async (req, res) => {
  * - currentScript (required): The full existing script result object
  * - instruction (optional): User's specific instruction for the rewrite
  */
-router.post('/regenerate-section', async (req, res) => {
+router.post('/regenerate-section', authenticateToken, async (req, res) => {
   try {
+    const userId = req.user?._id;
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: 'User authentication required. Please log in.'
+      });
+    }
+
     const { section, params, currentScript, instruction = '' } = req.body;
 
     const validSections = ['hook', 'body', 'cta'];
@@ -207,11 +323,30 @@ router.post('/regenerate-section', async (req, res) => {
       return res.status(400).json({ success: false, error: 'currentScript with hook and body is required.' });
     }
 
-    console.log(`[API] Regenerating section "${section}" for topic: "${params.topic.substring(0, 50)}"`);
+    console.log(`[API] Regenerating section "${section}" for user ${userId}, topic: "${params.topic.substring(0, 50)}"`);
 
-    const sectionData = await regenerateSection(params, currentScript, section, instruction);
+    // STRICT: Fetch creator's style profile for consistency
+    let creatorProfile = null;
+    try {
+      creatorProfile = await getCreatorStyleProfile(userId);
+    } catch (profileError) {
+      console.warn('[API] Could not fetch creator profile for section regeneration:', profileError.message);
+    }
 
-    res.status(200).json({ success: true, data: sectionData });
+    // Pass creatorProfile to the regeneration function
+    const sectionData = await regenerateSection(
+      { ...params, creatorProfile },
+      currentScript,
+      section,
+      instruction
+    );
+
+    console.log('[API] ✅ Section regenerated successfully');
+
+    res.status(200).json({
+      success: true,
+      data: sectionData
+    });
 
   } catch (error) {
     console.error('[API] Section regeneration error:', error.message);
@@ -224,6 +359,7 @@ router.post('/regenerate-section', async (req, res) => {
 /**
  * GET /health
  * Health check for the script generator service
+ * No authentication required
  */
 router.get('/health', (req, res) => {
   const hasApiKey = !!process.env.GEMINI_API_KEY;
