@@ -11,6 +11,26 @@ const { SYSTEM_PROMPT } = require('../training/system-prompt');
 const { HOOK_EXAMPLES, FULL_SCRIPT_EXAMPLE } = require('../training/hook-examples');
 const { FRAMEWORK_EXAMPLES } = require('../training/framework-examples');
 
+const PROHIBITED_TERMS = [
+  'ai',
+  'human touch',
+  'psychological hooks',
+  'content strategy',
+  'algorithm',
+  'storytelling technique',
+];
+
+const HINGLISH_MARKERS = [
+  'aap', 'hai', 'hain', 'aur', 'nahi', 'nahin', 'kya', 'kyunki', 'lekin',
+  'toh', 'ho', 'kar', 'se', 'mein', 'apni', 'apna', 'ka', 'ke', 'ki',
+  'sabse', 'log', 'mat', 'zaroor', 'balki', 'sirf', 'saath', 'agar', 'jo',
+];
+
+const ENGLISH_MARKERS = [
+  'you', 'your', 'the', 'and', 'with', 'from', 'this', 'that', 'what',
+  'how', 'because', 'while', 'already', 'people', 'story', 'video', 'comment',
+];
+
 // Initialize Gemini client
 const getGeminiClient = () => {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -50,6 +70,178 @@ const validateScriptStructure = (data) => {
   }
 
   return data;
+};
+
+const normalizeText = (text = '') => String(text).replace(/\s+/g, ' ').trim();
+
+const countWords = (text = '') => {
+  const cleaned = normalizeText(text);
+  if (!cleaned) return 0;
+  return cleaned.split(' ').filter(Boolean).length;
+};
+
+const splitSentences = (text = '') => {
+  const cleaned = normalizeText(text);
+  if (!cleaned) return [];
+  return cleaned
+    .split(/[.!?\n]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+};
+
+const countMarkerHits = (text, markers) => {
+  const lower = ` ${normalizeText(text).toLowerCase()} `;
+  return markers.reduce((count, marker) => {
+    return count + (lower.includes(` ${marker} `) ? 1 : 0);
+  }, 0);
+};
+
+const validateLanguageByTrainingStyle = (language, text) => {
+  const violations = [];
+  const hinglishHits = countMarkerHits(text, HINGLISH_MARKERS);
+  const englishHits = countMarkerHits(text, ENGLISH_MARKERS);
+
+  if (language === 'English' && hinglishHits > 3) {
+    violations.push('Language mismatch: output contains too many Hindi/Hinglish markers for English mode.');
+  }
+
+  if (language === 'Hindi' && hinglishHits < 4) {
+    violations.push('Language mismatch: Hindi mode requires stronger Hindi-style phrasing.');
+  }
+
+  if (language === 'Hinglish' && (hinglishHits < 2 || englishHits < 2)) {
+    violations.push('Language mismatch: Hinglish mode must naturally mix Hindi and English words.');
+  }
+
+  return violations;
+};
+
+/**
+ * Hard style checks inspired by backend-script/training/training-doc.md samples
+ * plus strict rules already defined in system prompt.
+ */
+const getTrainingComplianceViolations = (scriptData, params) => {
+  const violations = [];
+
+  const hookText = normalizeText(scriptData?.hook?.text);
+  const bodyText = normalizeText(scriptData?.body?.text);
+  const ctaText = normalizeText(scriptData?.cta?.text);
+  const combinedText = `${hookText} ${bodyText} ${ctaText}`.trim();
+
+  if (!hookText) violations.push('Hook text is empty.');
+  if (!bodyText) violations.push('Body text is empty.');
+  if (params.ctaEnabled && !ctaText) violations.push('CTA is enabled but CTA text is empty.');
+  if (!params.ctaEnabled && scriptData?.cta?.included) violations.push('CTA is disabled but output still includes CTA.');
+
+  const hookWordCount = countWords(hookText);
+  if (hookWordCount > 12) {
+    violations.push(`Hook exceeds 12 words (${hookWordCount}).`);
+  }
+
+  const allSentences = splitSentences(`${hookText}. ${bodyText}. ${ctaText}`);
+  const longSentence = allSentences.find((s) => countWords(s) > 12);
+  if (longSentence) {
+    violations.push(`Sentence exceeds 12 words: "${longSentence.substring(0, 80)}..."`);
+  }
+
+  const prohibitedHit = PROHIBITED_TERMS.find((term) => combinedText.toLowerCase().includes(term));
+  if (prohibitedHit) {
+    violations.push(`Contains prohibited term: "${prohibitedHit}".`);
+  }
+
+  const expectedWordCount = params.duration === '30s'
+    ? 90
+    : (params.duration === '1min' ? 150 : Math.round(parseFloat(params.customDuration || 1) * 150));
+
+  const generatedWordCount = countWords(`${hookText} ${bodyText} ${params.ctaEnabled ? ctaText : ''}`);
+  if (Math.abs(generatedWordCount - expectedWordCount) > 4) {
+    violations.push(`Word count mismatch: expected ~${expectedWordCount}, got ${generatedWordCount}.`);
+  }
+
+  violations.push(...validateLanguageByTrainingStyle(params.language, `${hookText} ${bodyText}`));
+
+  if (!scriptData?.body?.framework) {
+    violations.push('Body framework is missing.');
+  }
+
+  return violations;
+};
+
+const getSectionComplianceViolations = (section, sectionData, params) => {
+  const violations = [];
+
+  if (section === 'hook') {
+    const hookText = normalizeText(sectionData?.hook?.text);
+    if (!hookText) violations.push('Hook text is empty.');
+    if (countWords(hookText) > 12) violations.push('Regenerated hook exceeds 12 words.');
+    const longSentence = splitSentences(hookText).find((s) => countWords(s) > 12);
+    if (longSentence) violations.push('Regenerated hook has a sentence longer than 12 words.');
+    violations.push(...validateLanguageByTrainingStyle(params.language, hookText));
+  }
+
+  if (section === 'body') {
+    const bodyText = normalizeText(sectionData?.body?.text);
+    if (!bodyText) violations.push('Body text is empty.');
+    const longSentence = splitSentences(bodyText).find((s) => countWords(s) > 12);
+    if (longSentence) violations.push('Regenerated body has a sentence longer than 12 words.');
+    violations.push(...validateLanguageByTrainingStyle(params.language, bodyText));
+  }
+
+  if (section === 'cta') {
+    const included = sectionData?.cta?.included;
+    const ctaText = normalizeText(sectionData?.cta?.text);
+    if (params.ctaEnabled && (!included || !ctaText)) {
+      violations.push('CTA is enabled but regenerated CTA is empty/disabled.');
+    }
+    if (!params.ctaEnabled && included) {
+      violations.push('CTA is disabled but regenerated CTA is included.');
+    }
+  }
+
+  const fullSectionText = normalizeText(JSON.stringify(sectionData));
+  const prohibitedHit = PROHIBITED_TERMS.find((term) => fullSectionText.toLowerCase().includes(term));
+  if (prohibitedHit) {
+    violations.push(`Contains prohibited term: "${prohibitedHit}".`);
+  }
+
+  return violations;
+};
+
+const parseJsonFromResponseText = (text) => {
+  try {
+    return JSON.parse(text);
+  } catch (parseError) {
+    console.error('[ScriptGen] Direct JSON parse failed:', parseError.message);
+    console.error('[ScriptGen] Raw response preview:', text.substring(0, 300));
+
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]);
+    }
+
+    let cleanedText = text.trim().replace(/^```json\s*/i, '').replace(/\s*```$/, '');
+    const startBrace = cleanedText.indexOf('{');
+    const endBrace = cleanedText.lastIndexOf('}');
+
+    if (startBrace !== -1 && endBrace !== -1 && endBrace > startBrace) {
+      cleanedText = cleanedText.substring(startBrace, endBrace + 1);
+      return JSON.parse(cleanedText);
+    }
+
+    throw new Error(`AI returned invalid JSON. Parse error: ${parseError.message}`);
+  }
+};
+
+const buildComplianceRepairPrompt = (violations) => {
+  if (!violations.length) return '';
+
+  return `
+
+PREVIOUS OUTPUT REJECTED (STRICT STYLE ENFORCEMENT):
+${violations.map((v, i) => `${i + 1}. ${v}`).join('\n')}
+
+You MUST regenerate and fix ALL violations above.
+Return ONLY valid JSON in the required schema.`;
 };
 
 /**
@@ -404,68 +596,34 @@ const generateScript = async (params) => {
     console.log('[ScriptGen] Generating script for topic:', params.topic);
     console.log('[ScriptGen] Duration:', params.duration, '| Language:', params.language, '| Tone:', params.tone);
 
-    const result = await model.generateContent(fullPrompt);
-    const response = result.response;
-    const text = response.text();
+    let scriptData = null;
+    let violations = [];
+    const maxAttempts = 3;
 
-    console.log('[ScriptGen] Raw AI response length:', text.length);
-    console.log('[ScriptGen] Raw AI response preview:', text.substring(0, 150) + (text.length > 150 ? '...' : ''));
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const attemptPrompt = `${fullPrompt}${buildComplianceRepairPrompt(violations)}`;
+      const result = await model.generateContent(attemptPrompt);
+      const response = result.response;
+      const text = response.text();
 
-    // Parse the JSON response
-    let scriptData;
-    try {
-      // Try direct JSON parse
-      scriptData = JSON.parse(text);
-    } catch (parseError) {
-      console.error('[ScriptGen] Direct JSON parse failed:', parseError.message);
-      console.error('[ScriptGen] Raw response preview:', text.substring(0, 300));
-      
-      try {
-        // Try to extract JSON from potential markdown wrapping or multi-line format
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const extractedJson = jsonMatch[0];
-          console.log('[ScriptGen] Attempting to parse extracted JSON:', extractedJson.substring(0, 200));
-          scriptData = JSON.parse(extractedJson);
-        } else {
-          // Try to clean up common JSON formatting issues
-          let cleanedText = text.trim();
-          
-          // Remove markdown code blocks if present
-          cleanedText = cleanedText.replace(/^```json\s*/i, '').replace(/\s*```$/, '');
-          
-          // Remove any leading/trailing non-JSON content
-          const startBrace = cleanedText.indexOf('{');
-          const endBrace = cleanedText.lastIndexOf('}');
-          
-          if (startBrace !== -1 && endBrace !== -1 && endBrace > startBrace) {
-            cleanedText = cleanedText.substring(startBrace, endBrace + 1);
-            console.log('[ScriptGen] Attempting to parse cleaned JSON:', cleanedText.substring(0, 200));
-            scriptData = JSON.parse(cleanedText);
-          } else {
-            throw new Error('No valid JSON structure found in response');
-          }
-        }
-      } catch (secondParseError) {
-        console.error('[ScriptGen] All JSON parsing attempts failed');
-        console.error('[ScriptGen] Original error:', parseError.message);
-        console.error('[ScriptGen] Second attempt error:', secondParseError.message);
-        console.error('[ScriptGen] Full response text:', text);
-        
-        // Create a more detailed error message
-        let errorDetails = `AI returned invalid JSON. `;
-        if (parseError.message.includes('position')) {
-          errorDetails += `Parse error: ${parseError.message}. `;
-        }
-        errorDetails += `Response length: ${text.length} characters. `;
-        errorDetails += `Please try regenerating the script.`;
-        
-        throw new Error(errorDetails);
+      console.log('[ScriptGen] Raw AI response length:', text.length, '| attempt:', attempt);
+      console.log('[ScriptGen] Raw AI response preview:', text.substring(0, 150) + (text.length > 150 ? '...' : ''));
+
+      scriptData = parseJsonFromResponseText(text);
+      scriptData = validateScriptStructure(scriptData);
+
+      violations = getTrainingComplianceViolations(scriptData, params);
+      if (violations.length === 0) {
+        console.log('[ScriptGen] ✅ Strict compliance checks passed on attempt', attempt);
+        break;
+      }
+
+      console.warn(`[ScriptGen] Compliance failed on attempt ${attempt}:`, violations);
+      if (attempt === maxAttempts) {
+        throw new Error(`Strict training-style enforcement failed after ${maxAttempts} attempts: ${violations.join(' | ')}`);
       }
     }
 
-    // Validate the structure of the parsed JSON
-    scriptData = validateScriptStructure(scriptData);
     console.log('[ScriptGen] JSON structure validation passed');
 
     // Validate response structure
@@ -610,19 +768,29 @@ TASK: ${sectionPrompt}
 `;
 
     console.log(`[ScriptGen] Regenerating section: ${section} for topic: ${params.topic}`);
-    const result = await model.generateContent(fullPrompt);
-    const text = result.response.text();
 
-    let sectionData;
-    try {
-      sectionData = JSON.parse(text);
-    } catch {
-      const match = text.match(/\{[\s\S]*\}/);
-      if (match) sectionData = JSON.parse(match[0]);
-      else throw new Error('AI response was not valid JSON.');
+    let sectionData = null;
+    let violations = [];
+    const maxAttempts = 3;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const attemptPrompt = `${fullPrompt}${buildComplianceRepairPrompt(violations)}`;
+      const result = await model.generateContent(attemptPrompt);
+      const text = result.response.text();
+      sectionData = parseJsonFromResponseText(text);
+
+      violations = getSectionComplianceViolations(section, sectionData, params);
+      if (violations.length === 0) {
+        console.log(`[ScriptGen] ✅ Section "${section}" regenerated with strict compliance on attempt ${attempt}.`);
+        return sectionData;
+      }
+
+      console.warn(`[ScriptGen] Section compliance failed on attempt ${attempt}:`, violations);
+      if (attempt === maxAttempts) {
+        throw new Error(`Strict section compliance failed after ${maxAttempts} attempts: ${violations.join(' | ')}`);
+      }
     }
 
-    console.log(`[ScriptGen] ✅ Section "${section}" regenerated.`);
     return sectionData;
 
   } catch (error) {
