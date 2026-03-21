@@ -10,7 +10,9 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { SYSTEM_PROMPT } = require('../training/system-prompt');
 const { HOOK_EXAMPLES, FULL_SCRIPT_EXAMPLE } = require('../training/hook-examples');
 const { FRAMEWORK_EXAMPLES } = require('../training/framework-examples');
+require('dotenv').config();
 
+// ─── Configuration ────────────────────────────────────────────────
 const PROHIBITED_TERMS = [
   'ai',
   'human touch',
@@ -19,6 +21,11 @@ const PROHIBITED_TERMS = [
   'algorithm',
   'storytelling technique',
 ];
+
+const SCRIPT_GEN_WORD_COUNT_TOLERANCE = parseInt(process.env.SCRIPT_GEN_WORD_COUNT_TOLERANCE || '4');
+const SCRIPT_GEN_MAX_ATTEMPTS = parseInt(process.env.SCRIPT_GEN_MAX_ATTEMPTS || '3');
+const SCRIPT_GEN_CHECK_WORD_COUNT = process.env.SCRIPT_GEN_CHECK_WORD_COUNT !== 'false';
+const SCRIPT_GEN_CHECK_PROHIBITED_TERMS = process.env.SCRIPT_GEN_CHECK_PROHIBITED_TERMS !== 'false';
 
 const HINGLISH_MARKERS = [
   'aap', 'hai', 'hain', 'aur', 'nahi', 'nahin', 'kya', 'kyunki', 'lekin',
@@ -144,18 +151,24 @@ const getTrainingComplianceViolations = (scriptData, params) => {
     violations.push(`Sentence exceeds 12 words: "${longSentence.substring(0, 80)}..."`);
   }
 
-  const prohibitedHit = PROHIBITED_TERMS.find((term) => combinedText.toLowerCase().includes(term));
-  if (prohibitedHit) {
-    violations.push(`Contains prohibited term: "${prohibitedHit}".`);
+  // Prohibited terms check (can be disabled via env variable)
+  if (SCRIPT_GEN_CHECK_PROHIBITED_TERMS) {
+    const prohibitedHit = PROHIBITED_TERMS.find((term) => combinedText.toLowerCase().includes(term));
+    if (prohibitedHit) {
+      violations.push(`Contains prohibited term: "${prohibitedHit}".`);
+    }
   }
 
-  const expectedWordCount = params.duration === '30s'
-    ? 90
-    : (params.duration === '1min' ? 150 : Math.round(parseFloat(params.customDuration || 1) * 150));
+  // Word count check (can be disabled via env variable)
+  if (SCRIPT_GEN_CHECK_WORD_COUNT) {
+    const expectedWordCount = params.duration === '30s'
+      ? 90
+      : (params.duration === '1min' ? 150 : Math.round(parseFloat(params.customDuration || 1) * 150));
 
-  const generatedWordCount = countWords(`${hookText} ${bodyText} ${params.ctaEnabled ? ctaText : ''}`);
-  if (Math.abs(generatedWordCount - expectedWordCount) > 4) {
-    violations.push(`Word count mismatch: expected ~${expectedWordCount}, got ${generatedWordCount}.`);
+    const generatedWordCount = countWords(`${hookText} ${bodyText} ${params.ctaEnabled ? ctaText : ''}`);
+    if (Math.abs(generatedWordCount - expectedWordCount) > SCRIPT_GEN_WORD_COUNT_TOLERANCE) {
+      violations.push(`Word count mismatch: expected ~${expectedWordCount}, got ${generatedWordCount}.`);
+    }
   }
 
   violations.push(...validateLanguageByTrainingStyle(params.language, `${hookText} ${bodyText}`));
@@ -598,7 +611,7 @@ const generateScript = async (params) => {
 
     let scriptData = null;
     let violations = [];
-    const maxAttempts = 3;
+    const maxAttempts = SCRIPT_GEN_MAX_ATTEMPTS;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       const attemptPrompt = `${fullPrompt}${buildComplianceRepairPrompt(violations)}`;
@@ -771,7 +784,7 @@ TASK: ${sectionPrompt}
 
     let sectionData = null;
     let violations = [];
-    const maxAttempts = 3;
+    const maxAttempts = SCRIPT_GEN_MAX_ATTEMPTS;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       const attemptPrompt = `${fullPrompt}${buildComplianceRepairPrompt(violations)}`;
