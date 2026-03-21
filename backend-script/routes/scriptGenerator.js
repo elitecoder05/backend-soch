@@ -196,10 +196,21 @@ router.post('/generate', authenticateTokenOptional, async (req, res) => {
     }
 
     if (isFollowUp) {
-      if (!followUpInstruction || String(followUpInstruction).trim().length < 2) {
+      const trimmedInstruction = String(followUpInstruction).trim();
+      
+      if (!trimmedInstruction || trimmedInstruction.length < 5) {
         return res.status(400).json({
           success: false,
-          error: 'Follow-up instruction is required in follow-up mode.'
+          error: 'Follow-up instruction must be at least 5 characters. Provide a meaningful request like "make it shorter" or "use a different angle".'
+        });
+      }
+
+      // Reject vague/filler responses that model would ignore anyway
+      const vagueTerms = ['hi', 'ok', 'yes', 'no', 'cool', 'good', 'nice', 'sure', 'maybe', 'lol', 'hmm', 'ok cool'];
+      if (vagueTerms.includes(trimmedInstruction.toLowerCase())) {
+        return res.status(400).json({
+          success: false,
+          error: `"${followUpInstruction}" is too vague. Please specify what you want changed—e.g., "make it more aggressive", "focus on money", "simplify the language".`
         });
       }
 
