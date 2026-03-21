@@ -10,7 +10,117 @@ const { generateScript, regenerateSection } = require('../services/geminiService
 const { analyzeScript, updateCreatorStyleProfile, getCreatorStyleProfile } = require('../services/styleDetectionService');
 const CreatorStyleProfile = require('../../models/CreatorStyleProfile');
 const ScriptHistory = require('../../models/ScriptHistory');
+const User = require('../../models/User');
 const { authenticateTokenOptional } = require('../../middleware/auth');
+require('dotenv').config();
+
+// ─── Configuration ────────────────────────────────────────────────
+const GUEST_SCRIPT_LIMIT = parseInt(process.env.GUEST_SCRIPT_LIMIT || '5');
+const FREE_PLAN_SCRIPT_LIMIT = parseInt(process.env.FREE_PLAN_SCRIPT_LIMIT || '5');
+const PAID_PLAN_SCRIPT_LIMIT = parseInt(process.env.PAID_PLAN_SCRIPT_LIMIT || '0'); // 0 = unlimited
+
+// ─── Helper Functions ──────────────────────────────────────────────
+/**
+ * Check if monthly reset is needed for user's usage
+ */
+const checkAndResetMonthlyUsage = (user) => {
+  const now = new Date();
+  const lastReset = user.scriptGeneratorSubscription?.monthlyResetDate;
+  
+  if (!lastReset) return true; // First time, need reset
+  
+  // Check if a month has passed
+  const lastResetDate = new Date(lastReset);
+  const monthsPassed = (now.getFullYear() - lastResetDate.getFullYear()) * 12 + 
+                       (now.getMonth() - lastResetDate.getMonth());
+  
+  return monthsPassed >= 1;
+};
+
+/**
+ * Get the script generation limit for a user based on their plan
+ */
+const getScriptLimitForPlan = (planId) => {
+  if (planId === 'script-free') {
+    return FREE_PLAN_SCRIPT_LIMIT;
+  }
+  // Creator/paid plans have unlimited (0 means unlimited)
+  return PAID_PLAN_SCRIPT_LIMIT;
+};
+
+/**
+ * Check if user has exceeded their script generation limit
+ */
+const checkScriptGenerationLimit = async (userId) => {
+  if (!userId) {
+    // Guests are handled on frontend via localStorage
+    return { canGenerate: true, limit: GUEST_SCRIPT_LIMIT, remaining: -1, isGuest: true };
+  }
+
+  try {
+    const user = await User.findById(userId).lean();
+    if (!user) {
+      return { canGenerate: false, error: 'User not found', remaining: 0 };
+    }
+
+    const subscription = user.scriptGeneratorSubscription;
+    if (!subscription) {
+      return { canGenerate: false, error: 'No subscription found', remaining: 0 };
+    }
+
+    const planId = subscription.planId || 'script-free';
+    const limit = getScriptLimitForPlan(planId);
+
+    // If limit is 0, it means unlimited
+    if (limit === 0) {
+      return { canGenerate: true, limit: 0, remaining: -1, isUnlimited: true };
+    }
+
+    const usage = subscription.usageCount || 0;
+    const remaining = Math.max(0, limit - usage);
+
+    const canGenerate = usage < limit;
+    return { 
+      canGenerate, 
+      limit, 
+      remaining, 
+      usage,
+      planId,
+      resetDate: subscription.monthlyResetDate
+    };
+  } catch (error) {
+    console.error('[API] Error checking script limit:', error);
+    return { canGenerate: true, limit: FREE_PLAN_SCRIPT_LIMIT, remaining: -1 };
+  }
+};
+
+/**
+ * Increment script generation usage count for a user
+ */
+const incrementScriptUsage = async (userId) => {
+  try {
+    const user = await User.findById(userId);
+    if (!user) return null;
+
+    const subscription = user.scriptGeneratorSubscription;
+    if (!subscription) return null;
+
+    // Reset monthly usage if needed
+    if (checkAndResetMonthlyUsage(user)) {
+      subscription.usageCount = 0;
+      subscription.monthlyResetDate = new Date();
+    }
+
+    // Increment usage
+    subscription.usageCount = (subscription.usageCount || 0) + 1;
+    await user.save();
+
+    return subscription;
+  } catch (error) {
+    console.error('[API] Error incrementing script usage:', error);
+    return null;
+  }
+};
 
 /**
  * POST /generate
@@ -146,6 +256,28 @@ router.post('/generate', authenticateTokenOptional, async (req, res) => {
 
     console.log(`[API] Script generation request - User: ${userId || 'guest'} | Topic: "${topic.substring(0, 50)}..." | Duration: ${duration} | Language: ${language}`);
 
+    // CHECK USAGE LIMIT (only for logged-in users)
+    if (userId) {
+      const limitCheck = await checkScriptGenerationLimit(userId);
+      console.log('[API] Usage limit check:', limitCheck);
+      
+      if (!limitCheck.canGenerate) {
+        return res.status(429).json({
+          success: false,
+          error: `You have reached your monthly limit of ${limitCheck.limit} script generations.`,
+          limitExceeded: true,
+          limit: limitCheck.limit,
+          usage: limitCheck.usage,
+          remaining: 0,
+          resetDate: limitCheck.resetDate
+        });
+      }
+
+      if (limitCheck.limit > 0 && !limitCheck.isUnlimited) {
+        console.log(`[API] User ${userId} has ${limitCheck.remaining} scripts remaining (${limitCheck.usage}/${limitCheck.limit})`);
+      }
+    }
+
     // STRICT: Fetch creator's style profile (if exists)
     let creatorProfile = null;
     if (userId) {
@@ -196,6 +328,8 @@ router.post('/generate', authenticateTokenOptional, async (req, res) => {
           sessionId,
           persisted: false,
           guestMode: true,
+          limit: GUEST_SCRIPT_LIMIT,
+          // Guest remaining count is handled on frontend via localStorage
         }
       });
     }
@@ -254,6 +388,12 @@ router.post('/generate', authenticateTokenOptional, async (req, res) => {
       const updatedProfile = await updateCreatorStyleProfile(userId, scriptAnalysis, savedHistory._id);
       console.log('[API] ✅ Creator style profile updated, new status:', updatedProfile.profileStatus);
 
+      // Increment script usage
+      const updatedSubscription = await incrementScriptUsage(userId);
+      const remainingScripts = updatedSubscription?.usageCount 
+        ? Math.max(0, getScriptLimitForPlan(updatedSubscription.planId) - updatedSubscription.usageCount)
+        : -1;
+
       // Return with profile status
       res.status(200).json({
         success: true,
@@ -263,17 +403,30 @@ router.post('/generate', authenticateTokenOptional, async (req, res) => {
           sessionId: sessionId,
           turnNumber: nextTurnNumber,
           profileStatus: updatedProfile.profileStatus,
-          totalScriptsAnalyzed: updatedProfile.totalScriptsAnalyzed
+          totalScriptsAnalyzed: updatedProfile.totalScriptsAnalyzed,
+          usage: updatedSubscription?.usageCount || 0,
+          limit: getScriptLimitForPlan(updatedSubscription?.planId || 'script-free'),
+          remaining: remainingScripts
         }
       });
     } catch (analysisError) {
       console.error('[API] Warning: Could not update creator profile:', analysisError.message);
+      
+      // Increment script usage even if profile update fails
+      const updatedSubscription = await incrementScriptUsage(userId);
+      const remainingScripts = updatedSubscription?.usageCount 
+        ? Math.max(0, getScriptLimitForPlan(updatedSubscription.planId) - updatedSubscription.usageCount)
+        : -1;
+
       // Return the script anyway, but without profile metadata
       res.status(200).json({
         success: true,
         data: scriptData,
         metadata: {
-          warning: 'Script generated but profile update failed'
+          warning: 'Script generated but profile update failed',
+          usage: updatedSubscription?.usageCount || 0,
+          limit: getScriptLimitForPlan(updatedSubscription?.planId || 'script-free'),
+          remaining: remainingScripts
         }
       });
     }
@@ -358,6 +511,66 @@ router.post('/regenerate-section', authenticateTokenOptional, async (req, res) =
     
     const statusCode = error.message.includes('rate limit') || error.message.includes('quota') ? 429 : 500;
     res.status(statusCode).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * GET /usage
+ * 
+ * Get current script generation usage for the logged-in user
+ * Authentication required
+ * 
+ * Returns:
+ * - limit: Monthly limit for the user's plan
+ * - usage: Current usage this month
+ * - remaining: Scripts remaining this month
+ * - isUnlimited: Whether the user has unlimited scripts
+ * - planId: The user's current plan
+ * - resetDate: When the monthly usage resets
+ */
+router.get('/usage', authenticateTokenOptional, async (req, res) => {
+  try {
+    const userId = req.user?._id;
+
+    if (!userId) {
+      // Guests don't have a usage limit tracked on the backend
+      return res.status(200).json({
+        success: true,
+        data: {
+          isGuest: true,
+          limit: GUEST_SCRIPT_LIMIT,
+          message: 'Guest users are tracked on frontend via localStorage'
+        }
+      });
+    }
+
+    const limitCheck = await checkScriptGenerationLimit(userId);
+    
+    if (limitCheck.error) {
+      return res.status(404).json({
+        success: false,
+        error: limitCheck.error
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        limit: limitCheck.limit,
+        usage: limitCheck.usage || 0,
+        remaining: limitCheck.remaining,
+        isUnlimited: limitCheck.isUnlimited || false,
+        canGenerate: limitCheck.canGenerate,
+        planId: limitCheck.planId,
+        resetDate: limitCheck.resetDate
+      }
+    });
+  } catch (error) {
+    console.error('[API] Error fetching usage:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch usage information'
+    });
   }
 });
 
