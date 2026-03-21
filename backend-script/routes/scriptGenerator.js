@@ -195,13 +195,33 @@ router.post('/generate', authenticateTokenOptional, async (req, res) => {
       });
     }
 
+    // Helper: Detect follow-up instruction intent
+    const detectFollowUpIntent = (instruction) => {
+      const lower = instruction.toLowerCase();
+      
+      // Clarification intent: user doesn't understand or wants explanation
+      const clarificationKeywords = ['don\'t understand', 'not understanding', 'confused', 'explain', 'clarify', 'simplify', 'make it simpler', 'easier'];
+      if (clarificationKeywords.some(kw => lower.includes(kw))) {
+        return 'clarification';
+      }
+      
+      // New script intent: user explicitly wants something new
+      const newScriptKeywords = ['new script', 'different script', 'create new', 'generate new', 'fresh', 'start over'];
+      if (newScriptKeywords.some(kw => lower.includes(kw))) {
+        return 'new_script';
+      }
+      
+      // Default: modification intent (change/improve existing)
+      return 'modification';
+    };
+
     if (isFollowUp) {
       const trimmedInstruction = String(followUpInstruction).trim();
       
       if (!trimmedInstruction || trimmedInstruction.length < 5) {
         return res.status(400).json({
           success: false,
-          error: 'Follow-up instruction must be at least 5 characters. Provide a meaningful request like "make it shorter" or "use a different angle".'
+          error: 'Follow-up instruction must be at least 5 characters. Examples: "explain simpler", "make it shorter", "more aggressive", or "i don\'t understand".'
         });
       }
 
@@ -210,7 +230,7 @@ router.post('/generate', authenticateTokenOptional, async (req, res) => {
       if (vagueTerms.includes(trimmedInstruction.toLowerCase())) {
         return res.status(400).json({
           success: false,
-          error: `"${followUpInstruction}" is too vague. Please specify what you want changed—e.g., "make it more aggressive", "focus on money", "simplify the language".`
+          error: `"${followUpInstruction}" is too vague. Say what you need: "explain this simpler", "make it shorter", "focus on money", or "clarify the first part".`
         });
       }
 
@@ -220,6 +240,20 @@ router.post('/generate', authenticateTokenOptional, async (req, res) => {
           error: 'Current script context is required for follow-up mode.'
         });
       }
+    }
+
+    // Detect intent for follow-ups
+    const followUpIntent = isFollowUp ? detectFollowUpIntent(followUpInstruction) : null;
+
+    // For clarification requests, transform to explicit simplification instruction
+    let finalFollowUpInstruction = followUpInstruction;
+    if (followUpIntent === 'clarification') {
+      console.log(`[API] Follow-up intent detected: CLARIFICATION - transforming to simplification instruction`);
+      finalFollowUpInstruction = `The user says: "${followUpInstruction}". Please regenerate the script to be much simpler, clearer, and easier to understand. Use shorter sentences and explain the concepts more directly.`;
+    } else if (followUpIntent === 'new_script') {
+      console.log(`[API] Follow-up intent detected: NEW_SCRIPT - will generate completely new version`);
+    } else {
+      console.log(`[API] Follow-up intent detected: MODIFICATION - regenerate with changes`);
     }
 
     // Validate duration
@@ -322,7 +356,8 @@ router.post('/generate', authenticateTokenOptional, async (req, res) => {
       customCta,
       referenceUrl,
       isFollowUp,
-      followUpInstruction,
+      followUpInstruction: isFollowUp ? finalFollowUpInstruction : followUpInstruction,
+      followUpIntent,
       previousTopic,
       currentScript,
       creatorProfile // Pass the creator's style profile for STRICT enforcement
