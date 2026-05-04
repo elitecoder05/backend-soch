@@ -7,6 +7,7 @@
  */
 
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { jsonrepair } = require('jsonrepair');
 const { SYSTEM_PROMPT } = require('../training/system-prompt');
 const { HOOK_EXAMPLES, FULL_SCRIPT_EXAMPLE } = require('../training/hook-examples');
 const { FRAMEWORK_EXAMPLES } = require('../training/framework-examples');
@@ -221,28 +222,32 @@ const getSectionComplianceViolations = (section, sectionData, params) => {
 };
 
 const parseJsonFromResponseText = (text) => {
-  try {
-    return JSON.parse(text);
-  } catch (parseError) {
-    console.error('[ScriptGen] Direct JSON parse failed:', parseError.message);
-    console.error('[ScriptGen] Raw response preview:', text.substring(0, 300));
+  const candidates = [
+    text,
+    text.trim().replace(/^```json\s*/i, '').replace(/\s*```$/, ''),
+  ];
 
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
-    }
-
-    let cleanedText = text.trim().replace(/^```json\s*/i, '').replace(/\s*```$/, '');
-    const startBrace = cleanedText.indexOf('{');
-    const endBrace = cleanedText.lastIndexOf('}');
-
-    if (startBrace !== -1 && endBrace !== -1 && endBrace > startBrace) {
-      cleanedText = cleanedText.substring(startBrace, endBrace + 1);
-      return JSON.parse(cleanedText);
-    }
-
-    throw new Error(`AI returned invalid JSON. Parse error: ${parseError.message}`);
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    candidates.push(jsonMatch[0]);
   }
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+
+    try {
+      return JSON.parse(candidate);
+    } catch (parseError) {
+      try {
+        return JSON.parse(jsonrepair(candidate));
+      } catch {
+        console.error('[ScriptGen] Candidate JSON parse failed:', parseError.message);
+      }
+    }
+  }
+
+  console.error('[ScriptGen] Raw response preview:', text.substring(0, 300));
+  throw new Error('AI returned invalid JSON after repair attempts.');
 };
 
 const buildComplianceRepairPrompt = (violations) => {
